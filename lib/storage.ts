@@ -1,4 +1,5 @@
 import { normalizeAudit } from "@/lib/audit";
+import { seedUntouchedScore } from "@/lib/autoScore";
 import { makeId } from "@/lib/id";
 import { clampField, emptyScore } from "@/lib/scoring";
 import type {
@@ -60,7 +61,7 @@ function normalizeEntry(raw: unknown): JudgeEntry | null {
         ? record.key
         : record.url.toLowerCase().replace(/\/+$/, ""),
     audit,
-    score: normalizeScore(record.score),
+    score: seedUntouchedScore(normalizeScore(record.score), audit),
   };
 }
 

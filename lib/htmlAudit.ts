@@ -133,6 +133,162 @@ function imageMetrics(html: string): { raster: number; svg: number } {
   return { raster, svg };
 }
 
+/* --- Analisis bundle untuk situs client-rendered (SPA) ---------------------- */
+
+const IMAGE_TOKEN_RE = /[\w@%./-]+\.(?:jpe?g|png|webp|avif|gif|svg)\b/gi;
+
+interface BundleSignals {
+  rasterRefs: number;
+  svgRefs: number;
+  mvpSignals: number;
+  priceMentions: number;
+  interactiveHints: number;
+  inputHints: number;
+  hasNav: boolean;
+  hasFooter: boolean;
+  hasSearch: boolean;
+  copyLength: number;
+  polishSignals: number;
+}
+
+/**
+ * Deteksi shell client-rendered: HTML server hanya berisi mount point kosong
+ * (<div id="root"></div>) plus bundle, sementara konten asli dirakit di browser.
+ */
+function looksClientRendered(html: string, text: string): boolean {
+  if (text.length >= 1500) return false;
+  const emptyMount =
+    /id=["'](?:root|app|__next)["'][^>]*>\s*<\/(?:div|main|section)>/i.test(html);
+  const hasMount = /<div[^>]+id=["'](?:root|app|__next)["']/i.test(html);
+  const moduleScript = /<script\b[^>]+type=["']module["']/i.test(html);
+  const hasBundle = /<script\b[^>]+\bsrc\b/i.test(html);
+  if (emptyMount) return true;
+  if (hasMount && hasBundle && text.length < 400) return true;
+  if (moduleScript && hasBundle && text.length < 400) return true;
+  return false;
+}
+
+function collectAssetUrls(html: string, base: URL): { scripts: string[]; styles: string[] } {
+  const scripts: string[] = [];
+  const styles: string[] = [];
+
+  for (const tag of html.match(/<script\b[^>]*>/gi) ?? []) {
+    const src = attrValue(tag, "src");
+    if (!src) continue;
+    try {
+      const resolved = new URL(src, base);
+      if (resolved.origin === base.origin) scripts.push(resolved.toString());
+    } catch {
+      /* src tidak valid — abaikan */
+    }
+    if (scripts.length >= 4) break;
+  }
+
+  for (const tag of html.match(/<link\b[^>]*>/gi) ?? []) {
+    const rel = (attrValue(tag, "rel") ?? "").toLowerCase();
+    if (!rel.includes("stylesheet")) continue;
+    const href = attrValue(tag, "href");
+    if (!href) continue;
+    try {
+      const resolved = new URL(href, base);
+      if (resolved.origin === base.origin) styles.push(resolved.toString());
+    } catch {
+      /* href tidak valid — abaikan */
+    }
+    if (styles.length >= 3) break;
+  }
+
+  return { scripts, styles };
+}
+
+async function fetchAssetText(url: string, limit: number): Promise<string> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      signal: controller.signal,
+      cache: "no-store",
+      headers: { "user-agent": USER_AGENT, accept: "*/*" },
+    });
+    if (!response.ok) return "";
+    return (await response.text()).slice(0, limit);
+  } catch {
+    return "";
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Perkiraan panjang teks UI dari literal string di bundle. */
+function estimateCopyLength(text: string): number {
+  const literals = text.match(/["'`]([^"'`\\]{10,240})["'`]/g) ?? [];
+  let total = 0;
+  for (const raw of literals) {
+    const inner = raw.slice(1, -1);
+    if (!/\s/.test(inner)) continue;
+    if (/^(?:https?:|\/|data:|#)|[<>{;]/.test(inner)) continue;
+    const letters = (inner.match(/[A-Za-z]/g) ?? []).length;
+    if (letters < 8) continue;
+    total += inner.length;
+    if (total >= 8000) return 8000;
+  }
+  return total;
+}
+
+function analyzeBundle(bundle: string, css: string): BundleSignals {
+  const combined = `${bundle}\n${css}`;
+  const lower = combined.toLowerCase();
+
+  const raster = new Set<string>();
+  const svg = new Set<string>();
+  for (const token of combined.match(IMAGE_TOKEN_RE) ?? []) {
+    const value = token.toLowerCase();
+    if (value.includes(".svg")) svg.add(value);
+    else raster.add(value);
+  }
+
+  const mvpSignals = MVP_KEYWORDS.filter((keyword) => lower.includes(keyword)).length;
+  const priceMentions = (lower.match(/rp\.?\s?\d[\d.,]*/g) ?? []).length;
+
+  const interactiveHints =
+    countMatches(
+      combined,
+      /\bon(?:click|change|input|submit|focus|blur|keydown|mouseover|mouseenter|mousedown|pointerdown|touchstart)\b/gi,
+    ) +
+    countMatches(
+      combined,
+      /\b(?:keranjang|beli|pesan|tambah|checkout|cari|filter|kirim|simpan|masuk|daftar|whatsapp)\b/gi,
+    );
+  const inputHints = countMatches(combined, /\b(?:input|textarea|form|select)\b/gi);
+
+  const hasNav = /beranda|navigasi|\bnavbar\b|\bmenu\b|\bnav\b|home/i.test(lower);
+  const hasFooter = /footer|hak cipta|copyright|©/i.test(lower);
+  const hasSearch = /search|cari|pencarian|filter/i.test(lower);
+
+  const copyLength = estimateCopyLength(combined);
+  const polishSignals =
+    countMatches(
+      combined,
+      /\b(?:box-?shadow|border-?radius|transition|gradient|backdrop|hover:|rounded)\b/gi,
+    ) +
+    countMatches(css, /(?:box-shadow|border-radius|transition|gradient|@keyframes)\s*:/gi) * 2;
+
+  return {
+    rasterRefs: raster.size,
+    svgRefs: svg.size,
+    mvpSignals,
+    priceMentions,
+    interactiveHints,
+    inputHints,
+    hasNav,
+    hasFooter,
+    hasSearch,
+    copyLength,
+    polishSignals,
+  };
+}
+
 function collectSecurityHeaders(headers: Headers): string[] {
   const present: string[] = [];
   for (const name of EXPECTED_SECURITY_HEADERS) {
@@ -373,6 +529,7 @@ function failedAudit(url: string, message: string): AuditResult {
     hasViewportMeta: null,
     typography: null,
     hasDummyText: null,
+    clientRendered: null,
     httpsEnabled: null,
     exposedFiles: null,
     exposedSecrets: null,
@@ -460,6 +617,18 @@ export async function auditHtml(rawUrl: string): Promise<AuditResult> {
 
     const { raster, svg } = imageMetrics(html);
 
+    // Situs client-rendered (SPA): konten asli ada di bundle, bukan HTML server.
+    const clientRendered = looksClientRendered(html, text);
+    let bundle: BundleSignals | null = null;
+    if (clientRendered) {
+      const { scripts, styles } = collectAssetUrls(html, current);
+      const [scriptBodies, styleBodies] = await Promise.all([
+        Promise.all(scripts.map((src) => fetchAssetText(src, 900_000))),
+        Promise.all(styles.map((href) => fetchAssetText(href, 300_000))),
+      ]);
+      bundle = analyzeBundle(scriptBodies.join("\n"), styleBodies.join("\n"));
+    }
+
     const mvpSignals = MVP_KEYWORDS.filter((keyword) => textLower.includes(keyword)).length;
     const priceMentions = (textLower.match(/rp\.?\s?\d[\d.,]*/g) ?? []).length;
 
@@ -492,14 +661,35 @@ export async function auditHtml(rawUrl: string): Promise<AuditResult> {
       /\b(?:shadow(?:-[a-z]+)?|rounded(?:-[a-z]+)?|transition(?:-[a-z]+)?|backdrop-[a-z]+|hover:[a-z-]+)\b/gi,
     );
     const styleDeclarations = countMatches(html, /(?:box-shadow|border-radius|transition)\s*:/gi);
-    const polishSignals = polishTokens + styleDeclarations * 2;
+    const domPolishSignals = polishTokens + styleDeclarations * 2;
     const hasExternalStylesheet = /<link[^>]+rel\s*=\s*["']?stylesheet/i.test(html);
-    const polishedCards =
-      polishSignals > 0 ? Math.min(80, polishSignals) : hasExternalStylesheet ? null : 0;
 
     const hasDummyText = DUMMY_PATTERNS.some((pattern) => textLower.includes(pattern));
     const hasViewportMeta = /<meta[^>]+name\s*=\s*["']?viewport["']?/i.test(html);
-    const typography: "Baik" | "Datar" = /<h1\b/i.test(html) && text.length > 200 ? "Baik" : "Datar";
+
+    // Gabungkan sinyal DOM dengan sinyal bundle (khusus SPA) agar penilaian adil:
+    // situs client-rendered tetap dinilai dari foto, navigasi, dan fitur aslinya.
+    const effRaster = bundle ? Math.max(raster, bundle.rasterRefs) : raster;
+    const effSvg = bundle ? Math.max(svg, bundle.svgRefs) : svg;
+    const effMvpSignals = bundle ? Math.max(mvpSignals, bundle.mvpSignals) : mvpSignals;
+    const effPriceMentions = bundle ? Math.max(priceMentions, bundle.priceMentions) : priceMentions;
+    const effInteractive = bundle
+      ? Math.max(interactiveCount, bundle.interactiveHints)
+      : interactiveCount;
+    const effInputCount = bundle ? Math.max(inputCount, bundle.inputHints) : inputCount;
+    const effTextLength = bundle ? Math.max(text.length, bundle.copyLength) : text.length;
+    const effHasNav = hasNav || (bundle?.hasNav ?? false);
+    const effHasFooter = hasFooter || (bundle?.hasFooter ?? false);
+    const effHasSearch = hasSearch || (bundle?.hasSearch ?? false);
+    const effPolishSignals = Math.max(domPolishSignals, bundle?.polishSignals ?? 0);
+    const polishedCards =
+      effPolishSignals > 0 ? Math.min(80, effPolishSignals) : hasExternalStylesheet ? null : 0;
+    const typography: "Baik" | "Datar" =
+      /<h1\b/i.test(html) && text.length > 200
+        ? "Baik"
+        : (bundle?.copyLength ?? 0) > 400
+          ? "Baik"
+          : "Datar";
 
     const httpsEnabled = current.protocol === "https:";
 
@@ -521,26 +711,27 @@ export async function auditHtml(rawUrl: string): Promise<AuditResult> {
       url: current.toString(),
       statusCode,
       loadTimeSeconds,
-      rasterImages: raster,
-      svgImages: svg,
+      rasterImages: effRaster,
+      svgImages: effSvg,
       responsive: null,
       securityHeaders: collectSecurityHeaders(response.headers),
       consoleErrors: null,
       testedAt: new Date().toISOString(),
       source: "html",
       title,
-      textLength: text.length,
-      mvpSignals,
-      priceMentions,
-      interactiveCount,
-      inputCount,
+      textLength: effTextLength,
+      mvpSignals: effMvpSignals,
+      priceMentions: effPriceMentions,
+      interactiveCount: effInteractive,
+      inputCount: effInputCount,
       polishedCards,
-      hasNav,
-      hasFooter,
-      hasSearch,
+      hasNav: effHasNav,
+      hasFooter: effHasFooter,
+      hasSearch: effHasSearch,
       hasViewportMeta,
       typography,
       hasDummyText,
+      clientRendered,
       httpsEnabled,
       exposedFiles: probes.exposedFiles,
       exposedSecrets: probes.exposedSecrets,

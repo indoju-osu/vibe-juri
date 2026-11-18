@@ -14,7 +14,7 @@ import {
   IconSearch,
   IconTrophy,
 } from "@/components/ui/icons";
-import { autoRubricFromAudit } from "@/lib/autoScore";
+import { autoRubricFromAudit, seedUntouchedScore } from "@/lib/autoScore";
 import { entryFinalScore, sessionStats } from "@/lib/ranking";
 import { totalScore } from "@/lib/scoring";
 import { toast } from "@/lib/toast";
@@ -94,7 +94,10 @@ export default function JudgePage() {
       if (!currentId) return;
       update((draft) => {
         const entry = draft.entries.find((item) => item.id === currentId);
-        if (entry) entry.audit = audit;
+        if (entry) {
+          entry.audit = audit;
+          entry.score = seedUntouchedScore(entry.score, audit);
+        }
       });
     },
     [currentId, update],
@@ -104,7 +107,10 @@ export default function JudgePage() {
     (entryId: string, audit: AuditResult) => {
       update((draft) => {
         const entry = draft.entries.find((item) => item.id === entryId);
-        if (entry) entry.audit = audit;
+        if (entry) {
+          entry.audit = audit;
+          entry.score = seedUntouchedScore(entry.score, audit);
+        }
       });
     },
     [update],

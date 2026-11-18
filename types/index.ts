@@ -53,6 +53,12 @@ export interface AuditResult {
   typography: "Baik" | "Datar" | null;
   hasDummyText: boolean | null;
 
+  /**
+   * True bila halaman adalah shell client-rendered (SPA) — konten sesungguhnya
+   * baru muncul di browser. Metrik pelengkap diambil dari bundle JS/CSS.
+   */
+  clientRendered: boolean | null;
+
   /* --- Security probe metrics (bagian dari audit otomatis penuh) --- */
   httpsEnabled: boolean | null;
   exposedFiles: string[] | null;

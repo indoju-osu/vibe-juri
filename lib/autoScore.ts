@@ -1,5 +1,5 @@
 import { matchedSecurityHeaders } from "@/lib/audit";
-import type { AuditResult, AutoRubric, AutoScore, AutoSecurity } from "@/types";
+import type { AuditResult, AutoRubric, AutoScore, AutoSecurity, ScoreDetail } from "@/types";
 
 /**
  * Heuristik penilaian otomatis (nilai sementara).
@@ -67,14 +67,16 @@ function collectNotes(audit: AuditResult, metrics: {
   const notes: string[] = [];
   const { realPhotos, svgIllustrations, transactionScore, mobileFit, dummy } = metrics;
 
-  if (realPhotos >= 5 && transactionScore >= 8 && mobileFit === true && !dummy) {
+  if (realPhotos >= 5 && transactionScore >= 8 && !dummy) {
     notes.push(
-      "MVP siap pakai: foto produk raster asli, info transaksi lengkap, dan UI/UX matang",
+      "MVP siap pakai: foto produk asli terdeteksi dan info transaksi lengkap",
     );
+  } else if (realPhotos >= 2) {
+    notes.push("Foto produk asli terdeteksi, katalog cukup lengkap");
   } else if (realPhotos === 0 && svgIllustrations >= 4) {
     notes.push("Gambar produk masih ilustrasi vektor/SVG (belum foto produk asli)");
   } else if (realPhotos === 0) {
-    notes.push("Belum siap MVP: tidak ada foto produk asli (masih placeholder/teks)");
+    notes.push("Belum ada foto produk asli (masih placeholder/teks)");
   }
 
   if (dummy) notes.push("Masih terdapat teks dummy/contoh pada katalog");
@@ -216,10 +218,14 @@ export function autoScoreFromAudit(audit: AuditResult): AutoScore {
     loadTime,
     errors,
   });
-  if (partial) {
+  if (partial && !audit.clientRendered) {
     notes.push("Sebagian metrik browser tidak tersedia — skor otomatis bersifat perkiraan");
   }
-  if (audit.source === "html") {
+  if (audit.clientRendered) {
+    notes.push(
+      "Aplikasi dirender di browser (SPA) — metrik diambil dari HTML + bundle JS/CSS",
+    );
+  } else if (audit.source === "html") {
     notes.push("Diukur dari HTML server (tanpa render browser)");
   }
 
@@ -321,6 +327,10 @@ export function autoSecurityFromAudit(audit: AuditResult): AutoSecurity {
     if (pathsOpen.length > 0) {
       auth = Math.min(auth, Math.max(0, 5 - pathsOpen.length * 2));
       notes.push(`Rute sensitif dapat diakses langsung: ${pathsOpen.join(", ")}`);
+    } else if (guarded === 0) {
+      notes.push(
+        "Rute sensitif tidak dapat diverifikasi otomatis (aplikasi client-rendered / tanpa rute server)",
+      );
     } else {
       notes.push("Rute sensitif tertutup / terproteksi");
     }
@@ -376,4 +386,28 @@ export function autoRubricFromAudit(audit: AuditResult): AutoRubric {
 export function autoScoreLabel(score: AutoScore | null): string {
   if (!score) return "Belum diaudit";
   return `${score.total}/100 otomatis`;
+}
+
+/**
+ * Isi komponen rubrik dengan nilai awal otomatis HANYA jika juri belum menyentuh
+ * entri ini (belum disimpan & belum diedit). Dipakai agar panel penilaian langsung
+ * terisi hasil sementara saat audit selesai, tanpa menimpa editan juri.
+ * Personal tidak diisi (tetap 0 sampai juri menilai).
+ */
+export function seedUntouchedScore(score: ScoreDetail, audit: AuditResult | null): ScoreDetail {
+  if (!audit || auditFailed(audit)) return score;
+  if (score.judged || score.updatedAt) return score;
+
+  const rubric = autoRubricFromAudit(audit);
+  return {
+    ...score,
+    mvp: rubric.mvp,
+    uiux: rubric.uiux,
+    features: rubric.features,
+    secXss: rubric.secXss,
+    secAuth: rubric.secAuth,
+    secData: rubric.secData,
+    secHeaders: rubric.secHeaders,
+    secLogic: rubric.secLogic,
+  };
 }

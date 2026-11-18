@@ -241,6 +241,9 @@ export function normalizeAudit(
     hasDummyText: toBooleanOrNull(
       pick(record, ["hasDummyText", "has_dummy_text", "dummyText"]),
     ),
+    clientRendered: toBooleanOrNull(
+      pick(record, ["clientRendered", "client_rendered", "isSpa", "is_spa", "spa"]),
+    ),
     httpsEnabled: toBooleanOrNull(
       pick(record, ["httpsEnabled", "https_enabled", "isHttps", "is_https", "https"]),
     ),
@@ -316,6 +319,7 @@ export function createFailedAudit(
     hasViewportMeta: null,
     typography: null,
     hasDummyText: null,
+    clientRendered: null,
     httpsEnabled: null,
     exposedFiles: null,
     exposedSecrets: null,

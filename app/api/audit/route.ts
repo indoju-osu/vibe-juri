@@ -34,6 +34,7 @@ const EXPECTED_CONTRACT = {
       hasViewportMeta: true,
       typography: "Baik",
       hasDummyText: false,
+      clientRendered: false,
       httpsEnabled: true,
       exposedFiles: [],
       exposedSecrets: [],

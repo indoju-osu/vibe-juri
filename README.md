@@ -38,6 +38,7 @@ Dibangun dengan **Next.js App Router**, **TypeScript**, **Tailwind CSS**, dan **
 - Setiap karya diaudit otomatis saat `/judge` dibuka (kuota 2 audit paralel, progres + tombol stop/lanjut/coba-ulang). **Semua pemindaian dijalankan langsung** — termasuk probe keamanan aktif — tanpa langkah izin terpisah.
 - `POST /api/audit` memakai **auditor HTML bawaan** (fetch server-side + guard SSRF, redirect maks. 3, timeout 15 dtk, batas 3 MB) sehingga tetap berjalan tanpa worker. Bila `AUDIT_WORKER_URL` diisi, route mem-proxy ke worker Playwright untuk metrik browser penuh.
 - **Produk/UX otomatis (0–100):** status HTTP, waktu muat, foto raster vs SVG, responsif, error JS, jumlah elemen interaktif, indikator transaksi/MVP, teks dummy, viewport, hierarki tipografi, dan polish kartu → rubrik **MVP 35 · UI/UX 30 · Fitur 20 · Performa 15**.
+- **Situs client-rendered (SPA) dinilai adil:** bila HTML server hanya shell (`<div id="root"></div>`) dan konten dirakit di browser, auditor otomatis mengambil bundle JS/CSS same-origin lalu menurunkan sinyalnya (referensi foto produk raster, navigasi/footer/pencarian, indikator transaksi, kekayaan teks UI, polish). Metrik digabung dengan hasil DOM sehingga SPA tidak salah dinilai "tanpa foto/navigasi". Catatan hasil menandai dengan jelas bahwa metrik berasal dari HTML + bundle.
 - **Security otomatis (0–25):** diukur dari probe aktif yang aman (hanya `GET`):
   - **Headers & HTTPS (5):** header respons + protokol.
   - **XSS/sanitasi (5):** probe refleksi payload aman (`?__vibe_probe=…<vj>`).
@@ -45,7 +46,7 @@ Dibangun dengan **Next.js App Router**, **TypeScript**, **Tailwind CSS**, dan **
   - **Auth & kontrol akses (5):** probe rute sensitif `/admin`, `/api/admin`, `/api/users`, `/api/config` (deteksi SPA catch-all agar rute SPA tidak dihitung bocor). `401/403/3xx` dianggap terproteksi.
   - **Logika bisnis (5):** **tidak** diukur otomatis — tetap penilaian juri.
 - **Peringkat sementara = Produk/UX + Security (maks 85)**, Personal default 0. Nilai bertanda `/85`. Begitu juri mengisi Personal, komponen itu ditambahkan ke perhitungan rubrik resmi 100.
-- Tombol **Adopsi nilai awal** mengisi **seluruh** komponen rubrik juri (MVP, UI/UX, Fitur & Performa, plus 5 komponen Security) dari hasil audit; juri tinggal menyempurnakan.
+- Tombol **Adopsi nilai awal** mengisi **seluruh** komponen rubrik juri (MVP, UI/UX, Fitur & Performa, plus 5 komponen Security) dari hasil audit; juri tinggal menyempurnakan. Panel rubrik juga **terisi otomatis** saat audit selesai selama juri belum menyentuh entri itu (belum disimpan/diedit) — editan juri tidak pernah ditimpa. Personal tetap `0` sampai juri mengisinya.
 - Klasemen memakai **nilai juri bila sudah disimpan**, selain itu nilai otomatis Produk/UX + Security. Nilai juri default **0** sampai juri menekan simpan, jadi peringkat awal tetap adil dan berubah saat penjurian berjalan.
 - Kegagalan audit (timeout, HTTP ≥ 400, deployment terkunci) disimpan sebagai audit gagal → nilai sementara `0` dengan catatan alasannya; probe keamanan tidak dijalankan pada halaman yang gagal dimuat.
 
@@ -89,7 +90,7 @@ Deploy ke Vercel: import repo, framework terdeteksi otomatis, tidak perlu env un
 2. Periksa tab **Valid** dan **Duplikat / Tidak Valid**.
 3. Klik **Mulai Penjurian Split-Window** → `/judge`. Audit otomatis mulai berjalan dan nilai sementara terisi.
 4. Buka **Klasemen** untuk melihat peringkat sementara (nilai juri masih 0).
-5. Kembali ke `/judge`, klik **Buka Layar 75%**, uji web peserta, lalu beri skor. Gunakan **Adopsi nilai awal** bila ingin memakai nilai otomatis sebagai titik mulai.
+5. Kembali ke `/judge`, klik **Buka Layar 75%**, uji web peserta, lalu beri skor. Panel rubrik sudah terisi nilai otomatis sebagai titik mulai (gunakan **Adopsi nilai awal** untuk menyegarkan ulang).
 6. Tekan **Simpan Skor** → klasemen langsung berubah memakai nilai juri.
 7. Buka `/leaderboard`, cek filter/pencarian, lalu **Export Excel**.
 
