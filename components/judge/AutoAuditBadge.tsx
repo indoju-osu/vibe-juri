@@ -9,6 +9,7 @@ import {
   IconLoader,
   IconRefresh,
   IconShield,
+  IconSparkles,
   IconUpload,
   IconX,
 } from "@/components/ui/icons";
@@ -17,13 +18,20 @@ import {
   normalizeAudit,
   suggestedHeaderScore,
 } from "@/lib/audit";
+import {
+  auditFailed,
+  autoRubricFromAudit,
+  autoScoreFromAudit,
+  autoSecurityFromAudit,
+} from "@/lib/autoScore";
 import { toast } from "@/lib/toast";
-import type { AuditResult, JudgeEntry } from "@/types";
+import type { AuditResult, AuditSource, JudgeEntry } from "@/types";
 
 interface AutoAuditBadgeProps {
   entry: JudgeEntry;
   onChange: (audit: AuditResult | null) => void;
   onApplyHeaderScore: (score: number) => void;
+  onApplyAutoRubric: () => void;
 }
 
 function statusTone(code: number | null): string {
@@ -72,23 +80,28 @@ export function AutoAuditBadge({
   entry,
   onChange,
   onApplyHeaderScore,
+  onApplyAutoRubric,
 }: AutoAuditBadgeProps) {
   const audit = entry.audit;
+  const auto = audit ? autoScoreFromAudit(audit) : null;
+  const autoFailed = audit ? auditFailed(audit) : false;
+  const rubric = audit ? autoRubricFromAudit(audit) : null;
+  const sec = audit ? autoSecurityFromAudit(audit) : null;
   const [running, setRunning] = useState(false);
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteValue, setPasteValue] = useState("");
   const [inlineError, setInlineError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const applyRawAudit = (raw: unknown, source: "worker" | "manual"): boolean => {
+  const applyRawAudit = (raw: unknown, source: AuditSource): boolean => {
     try {
       const normalized = normalizeAudit(raw, entry.url, source);
       onChange(normalized);
       setInlineError(null);
       toast(
-        source === "worker"
-          ? "Hasil audit worker diterapkan ke panel juri."
-          : "JSON audit manual berhasil dimuat.",
+        source === "manual"
+          ? "JSON audit manual berhasil dimuat."
+          : "Hasil audit otomatis diterapkan ke panel juri.",
         "success",
       );
       return true;
@@ -113,13 +126,14 @@ export function AutoAuditBadge({
       const data = (await response.json().catch(() => ({}))) as {
         audit?: unknown;
         message?: string;
+        mode?: string;
       };
 
       if (!response.ok) {
         throw new Error(data.message || `Audit gagal dengan HTTP ${response.status}`);
       }
 
-      applyRawAudit(data.audit ?? data, "worker");
+      applyRawAudit(data.audit ?? data, data.mode === "worker" ? "worker" : "html");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Gagal menjalankan audit";
       setInlineError(message);
@@ -156,11 +170,24 @@ export function AutoAuditBadge({
           <div className="min-w-0">
             <p className="label-mono text-sky-400">Automated Audit</p>
             <h2 id="audit-title" className="truncate text-xs font-bold text-slate-50">
-              Metrik teknis & security headers
+              Nilai sementara &amp; metrik teknis
             </h2>
           </div>
         </div>
-        <span className="chip shrink-0 border-slate-600 bg-slate-900 text-slate-400">Opsional</span>
+        {auto && audit ? (
+          <span
+            className={`chip shrink-0 ${
+              autoFailed
+                ? "border-amber-500/40 bg-amber-500/10 text-amber-300"
+                : "border-sky-500/40 bg-sky-500/10 text-sky-300"
+            }`}
+            title="Peringkat sementara = Produk/UX + Security otomatis (Personal 0)"
+          >
+            {autoFailed ? "Audit gagal" : `${rubric?.total ?? 0}/85`}
+          </span>
+        ) : (
+          <span className="chip shrink-0 border-slate-600 bg-slate-900 text-slate-400">Belum</span>
+        )}
       </div>
 
       <div className="space-y-2 px-3 py-3">
@@ -171,13 +198,141 @@ export function AutoAuditBadge({
                 HTTP {audit.statusCode ?? "—"}
               </span>
               <span className="text-[10px] text-slate-500">
-                {audit.source === "worker" ? "Worker API" : "Import manual"} ·{" "}
+                {audit.source === "worker"
+                  ? "Worker Playwright"
+                  : audit.source === "html"
+                    ? "Audit HTML server"
+                    : "Import manual"}{" "}
+                ·{" "}
                 {new Date(audit.testedAt).toLocaleString("id-ID", {
                   dateStyle: "short",
                   timeStyle: "short",
                 })}
               </span>
             </div>
+
+            {auto ? (
+              <div className="rounded-lg border border-sky-500/30 bg-gradient-to-br from-sky-950/40 via-slate-900/60 to-slate-950/80 p-2">
+                <div className="flex items-end justify-between gap-2">
+                  <div>
+                    <p className="label-mono text-sky-300">Produk &amp; UX otomatis</p>
+                    <p className="font-mono text-2xl font-bold leading-none text-slate-50">
+                      {auto.total}
+                      <span className="ml-1 text-[10px] font-medium text-slate-500">/100</span>
+                    </p>
+                  </div>
+                  {autoFailed ? (
+                    <span className="chip border-amber-500/40 bg-amber-500/10 text-amber-300">
+                      Gagal
+                    </span>
+                  ) : auto.partial ? (
+                    <span className="chip border-amber-500/40 bg-amber-500/10 text-amber-300">
+                      Perkiraan
+                    </span>
+                  ) : (
+                    <span className="chip border-emerald-500/40 bg-emerald-500/10 text-emerald-300">
+                      Lengkap
+                    </span>
+                  )}
+                </div>
+
+                <dl className="mt-1.5 grid grid-cols-4 gap-1">
+                  {[
+                    { label: "MVP", value: auto.mvp, max: 35 },
+                    { label: "UI/UX", value: auto.uiux, max: 30 },
+                    { label: "Fitur", value: auto.features, max: 20 },
+                    { label: "Perf", value: auto.performance, max: 15 },
+                  ].map((item) => (
+                    <div key={item.label} className="rounded bg-slate-950/60 px-1 py-0.5">
+                      <dt className="label-mono text-[8px]">{item.label}</dt>
+                      <dd className="font-mono text-[11px] font-bold text-slate-100">
+                        {item.value}
+                        <span className="text-[8px] font-normal text-slate-500">/{item.max}</span>
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+
+                <ul className="mt-1.5 space-y-0.5 text-[10px] leading-snug text-slate-400">
+                  {auto.notes.map((note) => (
+                    <li key={note} className="flex items-start gap-1">
+                      <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-slate-500" />
+                      <span className="min-w-0 break-words">{note}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            {sec && auto && !autoFailed ? (
+              <div className="rounded-lg border border-emerald-500/30 bg-gradient-to-br from-emerald-950/40 via-slate-900/60 to-slate-950/80 p-2">
+                <div className="flex items-end justify-between gap-2">
+                  <div>
+                    <p className="label-mono text-emerald-300">Security otomatis</p>
+                    <p className="font-mono text-2xl font-bold leading-none text-slate-50">
+                      {sec.total}
+                      <span className="ml-1 text-[10px] font-medium text-slate-500">/25</span>
+                    </p>
+                  </div>
+                  <span
+                    className={`chip ${
+                      sec.partial
+                        ? "border-amber-500/40 bg-amber-500/10 text-amber-300"
+                        : "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+                    }`}
+                  >
+                    {sec.partial ? "Perkiraan" : "Terukur"}
+                  </span>
+                </div>
+
+                <dl className="mt-1.5 grid grid-cols-5 gap-1">
+                  {[
+                    { label: "XSS", value: sec.xss },
+                    { label: "Auth", value: sec.auth },
+                    { label: "Data", value: sec.data },
+                    { label: "Hdr", value: sec.headers },
+                    { label: "Logika", value: sec.logic },
+                  ].map((item) => (
+                    <div key={item.label} className="rounded bg-slate-950/60 px-1 py-0.5">
+                      <dt className="label-mono text-[8px]">{item.label}</dt>
+                      <dd
+                        className={`font-mono text-[11px] font-bold ${
+                          item.value >= 4
+                            ? "text-emerald-300"
+                            : item.value >= 2
+                              ? "text-amber-300"
+                              : "text-rose-300"
+                        }`}
+                      >
+                        {item.value}
+                        <span className="text-[8px] font-normal text-slate-500">/5</span>
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+
+                <ul className="mt-1.5 space-y-0.5 text-[10px] leading-snug text-slate-400">
+                  {sec.notes.map((note) => (
+                    <li key={note} className="flex items-start gap-1">
+                      <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-slate-500" />
+                      <span className="min-w-0 break-words">{note}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            {auto && !autoFailed ? (
+              <button
+                type="button"
+                className="btn-secondary w-full px-2 py-1 text-[10px]"
+                onClick={onApplyAutoRubric}
+                title="Isi komponen rubrik juri (Produk/UX + Security) dengan nilai awal dari audit otomatis"
+              >
+                <IconSparkles className="h-3.5 w-3.5" />
+                {`Adopsi nilai awal · ${rubric?.total ?? 0}/85`}
+              </button>
+            ) : null}
 
             <div className="grid grid-cols-2 gap-1.5">
               <Metric
@@ -245,7 +400,7 @@ export function AutoAuditBadge({
               </details>
             ) : (
               <p className="text-[10px] text-slate-500">
-                Tidak ada security header yang dilaporkan worker.
+                Tidak ada security header yang terdeteksi pada respons server.
               </p>
             )}
 
@@ -282,10 +437,11 @@ export function AutoAuditBadge({
           </>
         ) : (
           <div className="rounded-lg border border-dashed border-slate-700 bg-slate-950/40 px-2.5 py-3">
-            <p className="text-[11px] font-semibold text-slate-200">Belum ada data audit</p>
+            <p className="text-[11px] font-semibold text-slate-200">Belum ada nilai sementara</p>
             <p className="mt-0.5 text-[10px] leading-relaxed text-slate-500">
-              Jalankan worker Playwright melalui <span className="font-mono">/api/audit</span>, atau
-              impor JSON hasil audit secara manual. Penilaian tetap bisa dilakukan tanpa audit.
+              Audit otomatis berjalan sendiri saat panel juri dibuka. Klik{" "}
+              <span className="text-slate-300">Jalankan Audit</span> untuk mengulang, atau impor JSON
+              hasil audit manual. Penilaian juri tetap bisa dilakukan tanpa audit.
             </p>
           </div>
         )}
@@ -302,7 +458,7 @@ export function AutoAuditBadge({
             ) : (
               <IconRefresh className="h-3.5 w-3.5" />
             )}
-            {running ? "Mengaudit…" : "Jalankan Audit API"}
+            {running ? "Mengaudit…" : "Jalankan Audit"}
           </button>
           <button
             type="button"

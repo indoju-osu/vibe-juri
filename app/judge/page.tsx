@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
 import { AutoAuditBadge } from "@/components/judge/AutoAuditBadge";
+import { BulkAutoAudit } from "@/components/judge/BulkAutoAudit";
 import { ScoringPanel } from "@/components/judge/ScoringPanel";
 import { SplitWindowLauncher } from "@/components/judge/SplitWindowLauncher";
 import { ResetSessionButton } from "@/components/layout/ResetSessionButton";
@@ -13,7 +14,8 @@ import {
   IconSearch,
   IconTrophy,
 } from "@/components/ui/icons";
-import { sessionStats } from "@/lib/ranking";
+import { autoRubricFromAudit } from "@/lib/autoScore";
+import { entryFinalScore, sessionStats } from "@/lib/ranking";
 import { totalScore } from "@/lib/scoring";
 import { toast } from "@/lib/toast";
 import { useSession } from "@/lib/useSession";
@@ -36,6 +38,7 @@ export default function JudgePage() {
   const current = session?.entries[index];
 
   const stats = session ? sessionStats(session) : null;
+  const currentFinal = current ? entryFinalScore(current) : null;
   const urls = useMemo(() => session?.entries.map((entry) => entry.url) ?? [], [session]);
 
   const jumpTo = useCallback(
@@ -96,6 +99,38 @@ export default function JudgePage() {
     },
     [currentId, update],
   );
+
+  const handleAuditForEntry = useCallback(
+    (entryId: string, audit: AuditResult) => {
+      update((draft) => {
+        const entry = draft.entries.find((item) => item.id === entryId);
+        if (entry) entry.audit = audit;
+      });
+    },
+    [update],
+  );
+
+  const handleApplyAutoRubric = useCallback(() => {
+    if (!currentId) return;
+    update((draft) => {
+      const entry = draft.entries.find((item) => item.id === currentId);
+      if (!entry?.audit) return;
+      const rubric = autoRubricFromAudit(entry.audit);
+      entry.score = {
+        ...entry.score,
+        mvp: rubric.mvp,
+        uiux: rubric.uiux,
+        features: rubric.features,
+        secXss: rubric.secXss,
+        secAuth: rubric.secAuth,
+        secData: rubric.secData,
+        secHeaders: rubric.secHeaders,
+        secLogic: rubric.secLogic,
+        updatedAt: new Date().toISOString(),
+      };
+    });
+    toast("Nilai awal otomatis (Produk/UX + Security) diadopsi ke rubrik. Sesuaikan lalu simpan.", "success");
+  }, [currentId, update]);
 
   const handleApplyHeaderScore = useCallback(
     (score: number) => {
@@ -172,8 +207,8 @@ export default function JudgePage() {
             Split-Window &amp; Scoring
           </h1>
           <p className="mt-0.5 text-[11px] text-slate-500">
-            {stats.completionLabel} · rata-rata {stats.averageTotal}/100 ·{" "}
-            {stats.remaining} karya tersisa
+            {stats.completionLabel} · {stats.audited}/{stats.total} punya nilai otomatis · rata-rata
+            klasemen {stats.averageFinal}/100
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
@@ -208,10 +243,21 @@ export default function JudgePage() {
         <div className="card-quiet px-2.5 py-2">
           <p className="label-mono text-[9px]">Skor karya aktif</p>
           <p className="font-mono text-base font-bold text-rose-300">
-            {totalScore(current.score)}
+            {currentFinal?.total ?? 0}
             <span className="text-[10px] font-normal text-slate-500">/100</span>
           </p>
+          <p className="text-[9px] leading-tight text-slate-500">
+            {currentFinal?.source === "judge"
+              ? "nilai juri"
+              : currentFinal?.source === "auto"
+                ? `otomatis · juri ${totalScore(current.score)}`
+                : "belum ada nilai"}
+          </p>
         </div>
+      </div>
+
+      <div className="mt-3">
+        <BulkAutoAudit entries={session.entries} onAudit={handleAuditForEntry} />
       </div>
 
       <div className="mt-3 flex flex-col gap-3 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)] lg:items-start">
@@ -235,6 +281,7 @@ export default function JudgePage() {
               entry={current}
               onChange={handleAuditChange}
               onApplyHeaderScore={handleApplyHeaderScore}
+              onApplyAutoRubric={handleApplyAutoRubric}
             />
           </div>
 
@@ -273,6 +320,7 @@ export default function JudgePage() {
               ) : (
                 filteredQueue.map(({ entry, entryIndex }) => {
                   const active = entryIndex === index;
+                  const rowFinal = entryFinalScore(entry);
                   return (
                     <li key={entry.id}>
                       <button
@@ -315,10 +363,21 @@ export default function JudgePage() {
                           )}
                           <span
                             className={`w-7 text-right font-mono text-[10px] ${
-                              entry.score.judged ? "text-emerald-300" : "text-slate-400"
+                              rowFinal.source === "judge"
+                                ? "text-emerald-300"
+                                : rowFinal.source === "auto"
+                                  ? "text-sky-300"
+                                  : "text-slate-500"
                             }`}
+                            title={
+                              rowFinal.source === "judge"
+                                ? "Nilai juri"
+                                : rowFinal.source === "auto"
+                                  ? "Nilai otomatis (sementara)"
+                                  : "Belum ada nilai"
+                            }
                           >
-                            {totalScore(entry.score)}
+                            {rowFinal.total}
                           </span>
                         </span>
                       </button>
@@ -339,6 +398,7 @@ export default function JudgePage() {
             total={total}
             onChange={handleScoreChange}
             onSave={handleSave}
+            onAdoptAuto={handleApplyAutoRubric}
           />
         </div>
       </div>

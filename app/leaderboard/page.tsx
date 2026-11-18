@@ -157,8 +157,8 @@ export default function LeaderboardPage() {
             Klasemen belum tersedia
           </h1>
           <p className="mx-auto mt-1.5 max-w-md text-xs leading-relaxed text-slate-400">
-            Import URL peserta dan mulai penjurian. Peringkat akan dihitung otomatis dari skor
-            Produk/UX, Security, dan Personal Juri.
+            Import URL peserta untuk mengisi klasemen sementara otomatis. Nilai juri (default 0)
+            akan menggantikan nilai otomatis begitu disimpan.
           </p>
           <div className="mt-4 flex justify-center gap-2">
             <Link href="/" className="btn-primary">
@@ -187,7 +187,10 @@ export default function LeaderboardPage() {
             Klasemen &amp; Ekspor Laporan
           </h1>
           <p className="mt-0.5 text-[11px] text-slate-500">
-            Tie-breaker: Skor MVP → Security → Personal Juri → URL.
+            Peringkat memakai skor akhir: nilai juri bila sudah disimpan, selain itu{" "}
+            <span className="text-slate-300">Produk/UX + Security otomatis</span> (Personal 0,
+            ditambahkan saat juri mengisi). Tie-breaker: Produk/UX → Security → Personal → otomatis
+            → URL.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
@@ -233,8 +236,8 @@ export default function LeaderboardPage() {
         {[
           { label: "Total karya", value: String(stats.total), tone: "text-slate-50" },
           { label: "Sudah dinilai", value: `${stats.judged}`, tone: "text-emerald-300" },
-          { label: "Belum dinilai", value: `${stats.remaining}`, tone: "text-amber-300" },
-          { label: "Rata-rata skor", value: `${stats.averageTotal}`, tone: "text-rose-300" },
+          { label: "Nilai otomatis", value: `${stats.audited}/${stats.total}`, tone: "text-sky-300" },
+          { label: "Rata-rata klasemen", value: `${stats.averageFinal}`, tone: "text-rose-300" },
         ].map((item) => (
           <div key={item.label} className="card-quiet px-2.5 py-2">
             <p className="label-mono text-[9px]">{item.label}</p>
@@ -242,6 +245,19 @@ export default function LeaderboardPage() {
           </div>
         ))}
       </div>
+
+      {stats.pendingAudit > 0 ? (
+        <p className="mt-2 flex items-start gap-1.5 rounded-lg border border-sky-500/30 bg-sky-500/5 px-2.5 py-2 text-[11px] leading-relaxed text-sky-100/90">
+          <IconSparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-sky-400" />
+          <span className="min-w-0">
+            {stats.pendingAudit} karya belum punya nilai otomatis. Audit berjalan otomatis saat{" "}
+            <Link href="/judge" className="underline decoration-sky-400/60 hover:text-sky-50">
+              panel juri
+            </Link>{" "}
+            dibuka — klasemen akan terisi sendiri.
+          </span>
+        </p>
+      ) : null}
 
       <section className="card mt-3 overflow-hidden" aria-labelledby="ranking-title">
         <div className="flex flex-col gap-2 border-b border-slate-700/70 px-3 py-2.5 sm:px-4">
@@ -321,9 +337,10 @@ export default function LeaderboardPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] border-collapse text-left text-xs">
+          <table className="w-full min-w-[1140px] border-collapse text-left text-xs">
             <caption className="sr-only">
-              Klasemen karya peserta dengan rincian skor per pilar
+              Klasemen karya peserta dengan nilai otomatis Produk/UX + Security, nilai juri, dan
+              skor akhir
             </caption>
             <thead className="bg-slate-900 text-[10px] uppercase tracking-wider text-slate-400">
               <tr>
@@ -337,12 +354,22 @@ export default function LeaderboardPage() {
                   Security
                   <span className="block font-mono text-[9px] normal-case text-slate-500">/25</span>
                 </th>
-                <th scope="col" className="w-20 px-2 py-2 text-center font-semibold">
+                <th scope="col" className="w-16 px-2 py-2 text-center font-semibold">
                   Personal
                   <span className="block font-mono text-[9px] normal-case text-slate-500">/15</span>
                 </th>
+                <th scope="col" className="w-24 px-2 py-2 text-center font-semibold text-sky-300">
+                  Otomatis
+                  <span className="block font-mono text-[9px] normal-case text-slate-500">
+                    Prod+Sec /85
+                  </span>
+                </th>
                 <th scope="col" className="w-20 px-2 py-2 text-center font-semibold">
-                  Total
+                  Juri
+                  <span className="block font-mono text-[9px] normal-case text-slate-500">/100</span>
+                </th>
+                <th scope="col" className="w-20 px-2 py-2 text-center font-semibold text-rose-300">
+                  Akhir
                   <span className="block font-mono text-[9px] normal-case text-slate-500">/100</span>
                 </th>
                 <th scope="col" className="w-28 px-2 py-2 font-semibold">Status</th>
@@ -352,7 +379,7 @@ export default function LeaderboardPage() {
             <tbody className="divide-y divide-slate-800/80">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-3 py-10 text-center text-xs text-slate-500">
+                  <td colSpan={10} className="px-3 py-10 text-center text-xs text-slate-500">
                     Tidak ada karya yang cocok dengan pencarian / filter.
                   </td>
                 </tr>
@@ -368,7 +395,7 @@ export default function LeaderboardPage() {
                           {rank}
                         </span>
                       </td>
-                      <td className="max-w-[360px] px-2 py-2">
+                      <td className="max-w-[300px] px-2 py-2">
                         <span
                           className="block truncate font-mono text-[11px] text-slate-100"
                           title={entry.url}
@@ -386,30 +413,103 @@ export default function LeaderboardPage() {
                             </span>
                           ) : null}
                           {entry.audit ? (
-                            <span className="chip border-sky-500/30 bg-sky-500/10 text-sky-300">
-                              audit
+                            <span
+                              className={`chip ${
+                                breakdown.auto === null
+                                  ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
+                                  : "border-sky-500/30 bg-sky-500/10 text-sky-300"
+                              }`}
+                              title={
+                                entry.audit.error
+                                  ? `Audit gagal: ${entry.audit.error}`
+                                  : "Sudah diaudit otomatis"
+                              }
+                            >
+                              {entry.audit.error ? "audit gagal" : "audit"}
                             </span>
                           ) : null}
                         </span>
                       </td>
-                      <td className="px-2 py-2 text-center font-mono text-[11px] text-emerald-300">
-                        {breakdown.product}
+                      <td
+                        className={`px-2 py-2 text-center font-mono text-[11px] ${
+                          breakdown.source === "auto" ? "text-sky-200" : "text-emerald-300"
+                        }`}
+                        title={
+                          breakdown.source === "auto"
+                            ? "Produk/UX otomatis (belum dinilai juri)"
+                            : "Produk/UX dari nilai juri"
+                        }
+                      >
+                        {breakdown.effProduct}
                       </td>
-                      <td className="px-2 py-2 text-center font-mono text-[11px] text-sky-300">
-                        {breakdown.security}
+                      <td
+                        className={`px-2 py-2 text-center font-mono text-[11px] ${
+                          breakdown.source === "auto" ? "text-sky-200" : "text-sky-300"
+                        }`}
+                        title={
+                          breakdown.source === "auto"
+                            ? `Security otomatis · XSS ${breakdown.secAutoXss} · Auth ${breakdown.secAutoAuth} · Data ${breakdown.secAutoData} · Hdr ${breakdown.secAutoHeaders} · Logika ${breakdown.secAutoLogic}`
+                            : "Security dari nilai juri"
+                        }
+                      >
+                        {breakdown.effSecurity}
                       </td>
                       <td className="px-2 py-2 text-center font-mono text-[11px] text-amber-300">
                         {breakdown.personal}
                       </td>
                       <td className="px-2 py-2 text-center">
-                        <span className="inline-flex min-w-12 justify-center rounded-md border border-rose-500/30 bg-rose-500/10 px-1.5 py-0.5 font-mono text-xs font-bold text-rose-200">
+                        <span
+                          className={`font-mono text-[11px] ${
+                            breakdown.provisional === null
+                              ? "text-slate-600"
+                              : breakdown.source === "auto"
+                                ? "font-bold text-sky-200"
+                                : "text-sky-400/70"
+                          }`}
+                          title={
+                            breakdown.provisional === null
+                              ? "Belum diaudit otomatis"
+                              : `Produk/UX ${breakdown.autoProduct}/60 + Security ${breakdown.secAuto}/25 = ${breakdown.provisional}/85 · Produk detail: MVP ${breakdown.autoMvp} · UI/UX ${breakdown.autoUiux} · Fitur ${breakdown.autoFeatures} · Performa ${breakdown.autoPerformance}`
+                          }
+                        >
+                          {breakdown.provisional ?? "—"}
+                        </span>
+                      </td>
+                      <td className="px-2 py-2 text-center">
+                        <span
+                          className={`font-mono text-[11px] ${
+                            entry.score.judged
+                              ? "font-bold text-emerald-200"
+                              : entry.score.updatedAt
+                                ? "text-amber-300/80"
+                                : "text-slate-600"
+                          }`}
+                          title={entry.score.judged ? "Nilai juri (final)" : "Draft juri / default 0"}
+                        >
+                          {breakdown.judge}
+                        </span>
+                      </td>
+                      <td className="px-2 py-2 text-center">
+                        <span
+                          className={`inline-flex min-w-12 justify-center rounded-md border px-1.5 py-0.5 font-mono text-xs font-bold ${
+                            breakdown.source === "judge"
+                              ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+                              : breakdown.source === "auto"
+                                ? "border-rose-500/30 bg-rose-500/10 text-rose-200"
+                                : "border-slate-700 bg-slate-900 text-slate-400"
+                          }`}
+                        >
                           {breakdown.total}
                         </span>
                       </td>
                       <td className="px-2 py-2">
                         {entry.score.judged ? (
                           <span className="chip border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
-                            Sudah Dinilai
+                            Dinilai Juri
+                          </span>
+                        ) : breakdown.provisional !== null ? (
+                          <span className="chip border-rose-500/30 bg-rose-500/10 text-rose-300">
+                            Sementara
                           </span>
                         ) : entry.score.updatedAt ? (
                           <span className="chip border-amber-500/30 bg-amber-500/10 text-amber-300">
@@ -464,7 +564,8 @@ export default function LeaderboardPage() {
         <div className="flex flex-col gap-2 border-t border-slate-700/70 bg-slate-900/40 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
           <p className="text-[10px] leading-relaxed text-slate-500">
             Excel berisi 2 sheet: <span className="text-slate-300">Peringkat &amp; Audit Lengkap</span>{" "}
-            dan <span className="text-slate-300">Duplikat &amp; Tidak Valid</span>. File:{" "}
+            (termasuk kolom nilai otomatis, nilai juri, dan skor akhir) dan{" "}
+            <span className="text-slate-300">Duplikat &amp; Tidak Valid</span>. File:{" "}
             <span className="font-mono text-slate-400">{EXPORT_FILENAME}</span>
           </p>
           <button

@@ -12,6 +12,8 @@ import {
   IconSparkles,
 } from "@/components/ui/icons";
 import { copyText, toast } from "@/lib/toast";
+import { auditFailed } from "@/lib/autoScore";
+import { entryAutoRubric, entryAutoSecurity, entryFinalScore } from "@/lib/ranking";
 import {
   PERSONAL_FIELDS,
   PRODUCT_FIELDS,
@@ -30,6 +32,7 @@ interface ScoringPanelProps {
   total: number;
   onChange: (patch: Partial<ScoreDetail>) => void;
   onSave: () => void;
+  onAdoptAuto: () => void;
 }
 
 type TabId = "product" | "security" | "personal";
@@ -176,13 +179,26 @@ function ScoreRow({
   );
 }
 
-export function ScoringPanel({ entry, index, total, onChange, onSave }: ScoringPanelProps) {
+export function ScoringPanel({
+  entry,
+  index,
+  total,
+  onChange,
+  onSave,
+  onAdoptAuto,
+}: ScoringPanelProps) {
   const [tab, setTab] = useState<TabId>("product");
   const score = entry.score;
   const product = productSubtotal(score);
   const security = securitySubtotal(score);
   const personal = score.personal;
   const totalPoints = totalScore(score);
+  const final = entryFinalScore(entry);
+  const autoRubric = entryAutoRubric(entry);
+  const secAuto = entryAutoSecurity(entry);
+  const provisional = autoRubric ? autoRubric.total : null;
+  const canAdopt = entry.audit ? !auditFailed(entry.audit) : false;
+  const activePercent = Math.min(100, final.total);
   const updatedLabel = score.updatedAt
     ? new Date(score.updatedAt).toLocaleTimeString("id-ID", {
         hour: "2-digit",
@@ -220,7 +236,7 @@ export function ScoringPanel({ entry, index, total, onChange, onSave }: ScoringP
         <div className="rounded-lg border border-rose-500/30 bg-gradient-to-br from-rose-950/50 via-slate-900/60 to-slate-950/80 p-2.5">
           <div className="flex items-end justify-between gap-2">
             <div>
-              <p className="label-mono text-rose-300">Skor Total</p>
+              <p className="label-mono text-rose-300">Skor Juri · Rubrik 100</p>
               <p className="font-mono text-3xl font-bold leading-none text-slate-50">
                 {totalPoints}
                 <span className="ml-1 text-xs font-medium text-slate-500">/100</span>
@@ -229,10 +245,60 @@ export function ScoringPanel({ entry, index, total, onChange, onSave }: ScoringP
             <IconGauge className="h-6 w-6 text-rose-400/80" />
           </div>
 
+          <p className="mt-1 text-[10px] leading-snug text-slate-400">
+            {score.judged
+              ? "Tersimpan — klasemen memakai nilai juri ini."
+              : "Belum disimpan — klasemen sementara memakai nilai otomatis."}
+          </p>
+
+          <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+            <div
+              className="rounded-md border border-sky-500/30 bg-sky-500/5 px-1.5 py-1"
+              title={
+                autoRubric
+                  ? `Produk/UX ${autoRubric.product}/60 + Security ${autoRubric.security}/25 · Personal 0`
+                  : "Belum diaudit otomatis"
+              }
+            >
+              <p className="label-mono text-[9px] text-sky-400">Otomatis · Produk+Sec</p>
+              <p className="font-mono text-sm font-bold text-sky-200">
+                {provisional ?? "—"}
+                <span className="text-[9px] font-normal text-slate-500">/85</span>
+              </p>
+              {autoRubric ? (
+                <p className="text-[8px] leading-tight text-slate-400">
+                  Produk {autoRubric.product} · Sec {secAuto ? secAuto.total : 0}
+                </p>
+              ) : null}
+            </div>
+            <div
+              className={`rounded-md border px-1.5 py-1 ${
+                final.source === "judge"
+                  ? "border-emerald-500/40 bg-emerald-500/10"
+                  : final.source === "auto"
+                    ? "border-rose-500/30 bg-rose-500/10"
+                    : "border-slate-700 bg-slate-950/50"
+              }`}
+            >
+              <p className="label-mono text-[9px]">Skor klasemen</p>
+              <p className="font-mono text-sm font-bold text-slate-50">
+                {final.total}
+                <span className="text-[9px] font-normal text-slate-500">/100</span>
+              </p>
+              <p className="text-[8px] leading-tight text-slate-400">
+                {final.source === "judge"
+                  ? "Nilai juri"
+                  : final.source === "auto"
+                    ? "Sementara otomatis"
+                    : "Belum ada nilai"}
+              </p>
+            </div>
+          </div>
+
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-700/70">
             <div
               className="h-full rounded-full bg-gradient-to-r from-rose-600 via-rose-500 to-amber-400 transition-all"
-              style={{ width: `${Math.min(100, totalPoints)}%` }}
+              style={{ width: `${activePercent}%` }}
             />
           </div>
 
@@ -252,7 +318,19 @@ export function ScoringPanel({ entry, index, total, onChange, onSave }: ScoringP
             ))}
           </dl>
 
-          <button type="button" className="btn-success mt-2 w-full py-1.5 text-xs" onClick={onSave}>
+          {canAdopt ? (
+            <button
+              type="button"
+              className="btn-ghost mt-2 w-full py-1 text-[10px]"
+              onClick={onAdoptAuto}
+              title="Isi komponen rubrik dengan nilai awal dari audit otomatis"
+            >
+              <IconSparkles className="h-3.5 w-3.5" />
+              Adopsi nilai otomatis sebagai awal rubrik
+            </button>
+          ) : null}
+
+          <button type="button" className="btn-success mt-1.5 w-full py-1.5 text-xs" onClick={onSave}>
             <IconSave className="h-3.5 w-3.5" />
             Simpan Skor &amp; Tandai Selesai
           </button>

@@ -19,6 +19,21 @@ const SHEET1_HEADERS = [
   "Skor Total (100)",
   "Status Penilaian",
   "Catatan Evaluasi",
+  "Skor Otomatis Produk (100)",
+  "Auto MVP (35)",
+  "Auto UI/UX (30)",
+  "Auto Fitur (20)",
+  "Auto Performa (15)",
+  "Auto Produk/UX (60)",
+  "Auto Security (25)",
+  "Auto Sec XSS (5)",
+  "Auto Sec Auth (5)",
+  "Auto Sec Data (5)",
+  "Auto Sec Headers (5)",
+  "Auto Sec Logika (5)",
+  "Sementara Produk+Security (85)",
+  "Skor Akhir (100)",
+  "Sumber Skor Akhir",
 ] as const;
 
 const SHEET2_HEADERS = ["URL Asli", "Alasan Penolakan", "Skor Total"] as const;
@@ -59,9 +74,29 @@ export async function exportSessionToXlsx(session: SessionState): Promise<Export
       "Sec 5: Logika Bisnis (5)": entry.score.secLogic,
       "Subtotal Security (25)": breakdown.security,
       "Skor Personal Juri (15)": entry.score.personal,
-      "Skor Total (100)": breakdown.total,
+      "Skor Total (100)": breakdown.judge,
       "Status Penilaian": entry.score.judged ? "Sudah Dinilai" : "Belum Dinilai",
       "Catatan Evaluasi": entry.score.notes,
+      "Skor Otomatis Produk (100)": breakdown.auto ?? "",
+      "Auto MVP (35)": breakdown.autoMvp ?? "",
+      "Auto UI/UX (30)": breakdown.autoUiux ?? "",
+      "Auto Fitur (20)": breakdown.autoFeatures ?? "",
+      "Auto Performa (15)": breakdown.autoPerformance ?? "",
+      "Auto Produk/UX (60)": breakdown.autoProduct ?? "",
+      "Auto Security (25)": breakdown.secAuto ?? "",
+      "Auto Sec XSS (5)": breakdown.secAutoXss ?? "",
+      "Auto Sec Auth (5)": breakdown.secAutoAuth ?? "",
+      "Auto Sec Data (5)": breakdown.secAutoData ?? "",
+      "Auto Sec Headers (5)": breakdown.secAutoHeaders ?? "",
+      "Auto Sec Logika (5)": breakdown.secAutoLogic ?? "",
+      "Sementara Produk+Security (85)": breakdown.provisional ?? "",
+      "Skor Akhir (100)": breakdown.total,
+      "Sumber Skor Akhir":
+        breakdown.source === "judge"
+          ? "Juri"
+          : breakdown.source === "auto"
+            ? "Otomatis (sementara)"
+            : "Belum ada nilai",
     };
   });
 

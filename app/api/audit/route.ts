@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { normalizeAudit } from "@/lib/audit";
+import { auditHtml } from "@/lib/htmlAudit";
+import { assertPublicUrl } from "@/lib/urlGuard";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 30;
 
 const WORKER_TIMEOUT_MS = 25_000;
 
@@ -19,6 +22,26 @@ const EXPECTED_CONTRACT = {
       responsive: true,
       securityHeaders: ["content-security-policy", "x-content-type-options"],
       consoleErrors: 0,
+      textLength: 3200,
+      mvpSignals: 7,
+      priceMentions: 5,
+      interactiveCount: 48,
+      inputCount: 4,
+      polishedCards: 26,
+      hasNav: true,
+      hasFooter: true,
+      hasSearch: true,
+      hasViewportMeta: true,
+      typography: "Baik",
+      hasDummyText: false,
+      httpsEnabled: true,
+      exposedFiles: [],
+      exposedSecrets: [],
+      xssReflected: false,
+      xssProbes: 1,
+      pathsProbed: 4,
+      pathsGuarded: 4,
+      pathsOpen: [],
       testedAt: "2026-11-18T10:00:00.000Z",
     },
   },
@@ -30,12 +53,18 @@ export async function GET() {
     {
       ok: false,
       configured,
-      message:
-        "Gunakan POST { url } untuk menjalankan audit. Worker headless diatur lewat env AUDIT_WORKER_URL.",
+      mode: configured ? "worker" : "html",
+      message: configured
+        ? "Gunakan POST { url } untuk menjalankan audit via worker Playwright."
+        : "Tanpa AUDIT_WORKER_URL, /api/audit memakai auditor HTML bawaan (tanpa browser).",
       expected: EXPECTED_CONTRACT,
     },
     { status: 405, headers: { Allow: "POST" } },
   );
+}
+
+function badRequest(message: string, status = 400) {
+  return NextResponse.json({ ok: false, message }, { status });
 }
 
 export async function POST(request: Request) {
@@ -43,10 +72,7 @@ export async function POST(request: Request) {
   try {
     payload = await request.json();
   } catch {
-    return NextResponse.json(
-      { ok: false, message: "Body harus berupa JSON { url: string }." },
-      { status: 400 },
-    );
+    return badRequest("Body harus berupa JSON { url: string }.");
   }
 
   const rawUrl =
@@ -54,57 +80,37 @@ export async function POST(request: Request) {
       ? (payload as { url: string }).url.trim()
       : "";
 
-  if (!rawUrl) {
-    return NextResponse.json(
-      { ok: false, message: "Field url wajib diisi." },
-      { status: 400 },
-    );
-  }
+  if (!rawUrl) return badRequest("Field url wajib diisi.");
 
   let parsed: URL;
   try {
-    parsed = new URL(rawUrl);
-  } catch {
-    return NextResponse.json(
-      { ok: false, message: "URL tidak valid." },
-      { status: 400 },
-    );
-  }
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    return NextResponse.json(
-      { ok: false, message: "Hanya URL http/https yang dapat diaudit." },
-      { status: 400 },
-    );
+    parsed = await assertPublicUrl(rawUrl);
+  } catch (error) {
+    return badRequest(error instanceof Error ? error.message : "URL tidak valid.");
   }
 
   const workerUrl = process.env.AUDIT_WORKER_URL;
+
+  /* --- Mode bawaan: auditor HTML server-side (tanpa browser) ------------------ */
   if (!workerUrl) {
-    return NextResponse.json(
-      {
-        ok: false,
-        configured: false,
-        message:
-          "AUDIT_WORKER_URL belum dikonfigurasi. Set env ke endpoint Python Playwright/FastAPI, atau impor JSON audit secara manual di panel juri.",
-        expected: EXPECTED_CONTRACT,
-      },
-      { status: 501 },
-    );
+    const audit = await auditHtml(parsed.toString());
+    return NextResponse.json({
+      ok: true,
+      mode: "html",
+      audit,
+      message: audit.error ?? undefined,
+    });
   }
 
+  /* --- Mode worker: proxy ke Playwright/FastAPI ------------------------------- */
   let workerEndpoint: URL;
   try {
     workerEndpoint = new URL(workerUrl);
   } catch {
-    return NextResponse.json(
-      { ok: false, message: "AUDIT_WORKER_URL bukan URL yang valid." },
-      { status: 500 },
-    );
+    return badRequest("AUDIT_WORKER_URL bukan URL yang valid.", 500);
   }
   if (workerEndpoint.protocol !== "http:" && workerEndpoint.protocol !== "https:") {
-    return NextResponse.json(
-      { ok: false, message: "AUDIT_WORKER_URL harus menggunakan http/https." },
-      { status: 500 },
-    );
+    return badRequest("AUDIT_WORKER_URL harus menggunakan http/https.", 500);
   }
 
   const controller = new AbortController();
@@ -124,14 +130,7 @@ export async function POST(request: Request) {
     try {
       data = text ? (JSON.parse(text) as unknown) : null;
     } catch {
-      return NextResponse.json(
-        {
-          ok: false,
-          message: "Worker audit mengembalikan respons non-JSON.",
-          detail: text.slice(0, 400),
-        },
-        { status: 502 },
-      );
+      return badRequest("Worker audit mengembalikan respons non-JSON.", 502);
     }
 
     if (!upstream.ok) {
@@ -139,28 +138,21 @@ export async function POST(request: Request) {
         data && typeof data === "object" && typeof (data as { message?: unknown }).message === "string"
           ? (data as { message: string }).message
           : `Worker audit mengembalikan HTTP ${upstream.status}.`;
-      return NextResponse.json({ ok: false, message }, { status: 502 });
+      return badRequest(message, 502);
     }
 
     const audit = normalizeAudit(data, parsed.toString(), "worker");
-    return NextResponse.json({ ok: true, audit });
+    return NextResponse.json({ ok: true, mode: "worker", audit });
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
-      return NextResponse.json(
-        { ok: false, message: "Audit timeout setelah 25 detik. Coba lagi atau impor JSON manual." },
-        { status: 504 },
-      );
+      return badRequest("Audit timeout setelah 25 detik. Coba lagi atau impor JSON manual.", 504);
     }
     if (error instanceof Error && error.message.includes("audit")) {
-      return NextResponse.json({ ok: false, message: error.message }, { status: 502 });
+      return badRequest(error.message, 502);
     }
-    return NextResponse.json(
-      {
-        ok: false,
-        message:
-          "Tidak dapat menghubungi worker audit. Periksa AUDIT_WORKER_URL dan pastikan worker aktif.",
-      },
-      { status: 502 },
+    return badRequest(
+      "Tidak dapat menghubungi worker audit. Periksa AUDIT_WORKER_URL dan pastikan worker aktif.",
+      502,
     );
   } finally {
     clearTimeout(timeout);

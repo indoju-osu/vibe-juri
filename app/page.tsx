@@ -17,7 +17,7 @@ import {
   IconTrophy,
 } from "@/components/ui/icons";
 import { sessionStats } from "@/lib/ranking";
-import { SAMPLE_RAW_URLS } from "@/lib/sampleData";
+import { REAL_BATCH_RAW_LINES, SAMPLE_RAW_URLS } from "@/lib/sampleData";
 import { SECURITY_FIELDS } from "@/lib/scoring";
 import { buildSession } from "@/lib/storage";
 import { toast } from "@/lib/toast";
@@ -90,6 +90,19 @@ export default function HomePage() {
     });
   };
 
+  const handleLoadRealBatch = () => {
+    const result = cleanBatch(REAL_BATCH_RAW_LINES);
+    setPreview(result);
+    setSourceLabel("Batch Vibe Coding (data asli)");
+    toast(
+      `Batch asli dimuat: ${result.valid.length} URL valid + ${result.ignored.length} diabaikan. Audit otomatis akan mengisi klasemen sementara.`,
+      "success",
+    );
+    requestAnimationFrame(() => {
+      document.getElementById("preview-title")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
+
   const launchJudging = () => {
     if (!preview || preview.valid.length === 0) {
       toast("Import URL valid terlebih dahulu.", "warning");
@@ -145,9 +158,9 @@ export default function HomePage() {
               <IconArrowRight className="h-4 w-4" />
               Mulai Import URL
             </a>
-            <button type="button" className="btn-secondary" onClick={handleLoadSample}>
+            <button type="button" className="btn-secondary" onClick={handleLoadRealBatch}>
               <IconSparkles className="h-4 w-4 text-amber-300" />
-              Muat 60 Proyek Contoh
+              Muat Batch Vibe Coding
             </button>
             {session ? (
               <Link href="/judge" className="btn-ghost">
@@ -219,7 +232,7 @@ export default function HomePage() {
             <p className="mt-0.5 text-sm font-semibold text-slate-100">
               {stats.completionLabel}
               <span className="ml-2 font-mono text-xs text-slate-400">
-                · rata-rata {stats.averageTotal} / 100
+                · rata-rata klasemen {stats.averageFinal} / 100
               </span>
             </p>
             <div className="mt-1.5 flex items-center gap-2">
