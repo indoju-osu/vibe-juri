@@ -341,3 +341,11 @@ export function IconMoon(props: IconProps) {
     </Svg>
   );
 }
+
+export function IconPlus(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M12 5v14M5 12h14" />
+    </Svg>
+  );
+}

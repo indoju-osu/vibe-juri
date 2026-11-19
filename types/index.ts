@@ -74,6 +74,7 @@ export interface AuditResult {
   searchWorks: boolean | null;
   negativeQtyRejected: boolean | null;
   stockGuardDetected: boolean | null;
+  screenshotDataUrl: string | null;
 
   locked: boolean | null;
   platformError: boolean | null;

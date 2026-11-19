@@ -270,6 +270,9 @@ export function normalizeAudit(
     stockGuardDetected: toBooleanOrNull(
       pick(record, ["stockGuardDetected", "stock_guard_detected"]),
     ),
+    screenshotDataUrl: toTextOrNull(
+      pick(record, ["screenshotDataUrl", "screenshot_data_url", "screenshot"]),
+    ),
     locked: toBooleanOrNull(pick(record, ["locked", "isLocked", "requiresLogin"])),
     platformError: toBooleanOrNull(
       pick(record, ["platformError", "platform_error", "deploymentError"]),
@@ -342,6 +345,7 @@ export function createFailedAudit(
     searchWorks: null,
     negativeQtyRejected: null,
     stockGuardDetected: null,
+    screenshotDataUrl: null,
     locked: null,
     platformError: null,
     error: message,

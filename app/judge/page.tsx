@@ -6,6 +6,7 @@ import { AutoAuditBadge } from "@/components/judge/AutoAuditBadge";
 import { BulkAutoAudit } from "@/components/judge/BulkAutoAudit";
 import { ScoringPanel } from "@/components/judge/ScoringPanel";
 import { SplitWindowLauncher } from "@/components/judge/SplitWindowLauncher";
+import { WebsiteScreenshotCard } from "@/components/judge/WebsiteScreenshotCard";
 import { ResetSessionButton } from "@/components/layout/ResetSessionButton";
 import {
   IconCheckCircle,
@@ -14,7 +15,7 @@ import {
   IconSearch,
   IconTrophy,
 } from "@/components/ui/icons";
-import { autoRubricFromAudit, seedUntouchedScore } from "@/lib/autoScore";
+import { seedUntouchedScore } from "@/lib/autoScore";
 import { entryFinalScore, sessionStats } from "@/lib/ranking";
 import { totalScore } from "@/lib/scoring";
 import { toast } from "@/lib/toast";
@@ -114,41 +115,6 @@ export default function JudgePage() {
       });
     },
     [update],
-  );
-
-  const handleApplyAutoRubric = useCallback(() => {
-    if (!currentId) return;
-    update((draft) => {
-      const entry = draft.entries.find((item) => item.id === currentId);
-      if (!entry?.audit) return;
-      const rubric = autoRubricFromAudit(entry.audit);
-      entry.score = {
-        ...entry.score,
-        mvp: rubric.mvp,
-        uiux: rubric.uiux,
-        features: rubric.features,
-        secXss: rubric.secXss,
-        secAuth: rubric.secAuth,
-        secData: rubric.secData,
-        secHeaders: rubric.secHeaders,
-        secLogic: rubric.secLogic,
-        updatedAt: new Date().toISOString(),
-      };
-    });
-    toast("Nilai awal otomatis (Produk/UX + Security) diadopsi ke rubrik. Sesuaikan lalu simpan.", "success");
-  }, [currentId, update]);
-
-  const handleApplyHeaderScore = useCallback(
-    (score: number) => {
-      if (!currentId) return;
-      update((draft) => {
-        const entry = draft.entries.find((item) => item.id === currentId);
-        if (!entry) return;
-        entry.score.secHeaders = score;
-        entry.score.updatedAt = new Date().toISOString();
-      });
-    },
-    [currentId, update],
   );
 
   const filteredQueue = useMemo(() => {
@@ -266,7 +232,7 @@ export default function JudgePage() {
         <BulkAutoAudit entries={session.entries} onAudit={handleAuditForEntry} />
       </div>
 
-      <div className="mt-3 flex flex-col gap-3 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)] lg:items-start">
+      <div className="mt-3 flex flex-col gap-3 lg:grid lg:grid-cols-[minmax(0,1.15fr)_minmax(420px,480px)] lg:items-start lg:gap-4">
         <div className="contents lg:block lg:min-w-0 lg:space-y-3">
           <div className="order-1 min-w-0">
             <SplitWindowLauncher
@@ -286,8 +252,6 @@ export default function JudgePage() {
               key={`audit-${current.id}`}
               entry={current}
               onChange={handleAuditChange}
-              onApplyHeaderScore={handleApplyHeaderScore}
-              onApplyAutoRubric={handleApplyAutoRubric}
             />
           </div>
 
@@ -396,7 +360,8 @@ export default function JudgePage() {
           </div>
         </div>
 
-        <div className="order-2 min-w-0 lg:order-none">
+        <div className="order-2 min-w-0 space-y-3 lg:order-none">
+          <WebsiteScreenshotCard entry={current} />
           <ScoringPanel
             key={current.id}
             entry={current}
@@ -404,7 +369,6 @@ export default function JudgePage() {
             total={total}
             onChange={handleScoreChange}
             onSave={handleSave}
-            onAdoptAuto={handleApplyAutoRubric}
           />
         </div>
       </div>

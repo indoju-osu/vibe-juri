@@ -66,7 +66,7 @@ export function AppHeader() {
           className="flex min-w-0 items-center gap-2.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/60"
           aria-label="Vibe-Juri — kembali ke halaman import"
         >
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-rose-500/50 bg-gradient-to-br from-rose-600 to-rose-800 shadow-glow">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-rose-500/50 bg-rose-600 shadow-glow dark:bg-gradient-to-br dark:from-rose-600 dark:to-rose-800">
             <span className="font-mono text-[12px] font-bold tracking-tighter text-white">VJ</span>
           </span>
           <span className="min-w-0">

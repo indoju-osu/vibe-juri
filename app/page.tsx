@@ -224,7 +224,7 @@ export default function HomePage() {
 
       {loaded && session && stats ? (
         <section
-          className="mt-4 flex flex-col gap-3 rounded-xl border border-rose-500/30 bg-gradient-to-r from-rose-950/40 via-slate-900/70 to-slate-900/40 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4"
+          className="mt-4 flex flex-col gap-3 rounded-xl border border-rose-500/30 bg-slate-900/80 px-3 py-3 dark:bg-gradient-to-r dark:from-rose-950/40 dark:via-slate-900/70 dark:to-slate-900/40 sm:flex-row sm:items-center sm:justify-between sm:px-4"
           aria-label="Sesi penjurian aktif"
         >
           <div className="min-w-0">

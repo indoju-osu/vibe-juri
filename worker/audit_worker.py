@@ -16,6 +16,7 @@ Lalu set di .env.local:
 
 from __future__ import annotations
 
+import base64
 import re
 import secrets
 import time
@@ -372,6 +373,7 @@ async def audit_url(url: str) -> dict:
         "searchWorks": None,
         "negativeQtyRejected": None,
         "stockGuardDetected": None,
+        "screenshotDataUrl": None,
         "locked": None,
         "platformError": None,
         "error": None,
@@ -451,6 +453,14 @@ async def audit_url(url: str) -> dict:
                     "platformError": False,
                 }
             )
+
+            try:
+                shot_bytes = await page.screenshot(type="jpeg", quality=50, full_page=False)
+                result["screenshotDataUrl"] = "data:image/jpeg;base64," + base64.b64encode(
+                    shot_bytes
+                ).decode("ascii")
+            except Exception:  # noqa: BLE001
+                pass
 
             await page.set_viewport_size({"width": 375, "height": 812})
             await page.wait_for_timeout(400)

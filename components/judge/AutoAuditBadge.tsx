@@ -1,22 +1,15 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import {
   IconAlertTriangle,
-  IconCheckCircle,
-  IconClipboard,
-  IconDownload,
   IconLoader,
   IconRefresh,
   IconShield,
-  IconSparkles,
-  IconUpload,
-  IconX,
 } from "@/components/ui/icons";
 import {
   matchedSecurityHeaders,
   normalizeAudit,
-  suggestedHeaderScore,
 } from "@/lib/audit";
 import {
   auditFailed,
@@ -30,8 +23,6 @@ import type { AuditResult, AuditSource, JudgeEntry } from "@/types";
 interface AutoAuditBadgeProps {
   entry: JudgeEntry;
   onChange: (audit: AuditResult | null) => void;
-  onApplyHeaderScore: (score: number) => void;
-  onApplyAutoRubric: () => void;
 }
 
 function statusTone(code: number | null): string {
@@ -79,8 +70,6 @@ function Metric({
 export function AutoAuditBadge({
   entry,
   onChange,
-  onApplyHeaderScore,
-  onApplyAutoRubric,
 }: AutoAuditBadgeProps) {
   const audit = entry.audit;
   const auto = audit ? autoScoreFromAudit(audit) : null;
@@ -88,10 +77,7 @@ export function AutoAuditBadge({
   const rubric = audit ? autoRubricFromAudit(audit) : null;
   const sec = audit ? autoSecurityFromAudit(audit) : null;
   const [running, setRunning] = useState(false);
-  const [pasteOpen, setPasteOpen] = useState(false);
-  const [pasteValue, setPasteValue] = useState("");
   const [inlineError, setInlineError] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
 
   const applyRawAudit = (raw: unknown, source: AuditSource): boolean => {
     try {
@@ -143,22 +129,7 @@ export function AutoAuditBadge({
     }
   };
 
-  const importFile = async (file: File) => {
-    try {
-      const text = await file.text();
-      const parsed = JSON.parse(text) as unknown;
-      if (applyRawAudit(parsed, "manual")) setPasteOpen(false);
-    } catch {
-      const message = "File JSON tidak valid. Pastikan isinya objek audit.";
-      setInlineError(message);
-      toast(message, "error");
-    } finally {
-      if (fileRef.current) fileRef.current.value = "";
-    }
-  };
-
   const matched = audit ? matchedSecurityHeaders(audit) : [];
-  const headerScore = audit ? suggestedHeaderScore(audit) : 0;
 
   return (
     <section className="card overflow-hidden" aria-labelledby="audit-title">
@@ -212,7 +183,7 @@ export function AutoAuditBadge({
             </div>
 
             {auto ? (
-              <div className="rounded-lg border border-sky-500/30 bg-gradient-to-br from-sky-950/40 via-slate-900/60 to-slate-950/80 p-2">
+              <div className="rounded-lg border border-sky-500/35 bg-slate-900/60 p-2.5 dark:bg-gradient-to-br dark:from-sky-950/40 dark:via-slate-900/60 dark:to-slate-950/80">
                 <div className="flex items-end justify-between gap-2">
                   <div>
                     <p className="label-mono text-sky-300">Produk &amp; UX otomatis</p>
@@ -265,7 +236,7 @@ export function AutoAuditBadge({
             ) : null}
 
             {sec && auto && !autoFailed ? (
-              <div className="rounded-lg border border-emerald-500/30 bg-gradient-to-br from-emerald-950/40 via-slate-900/60 to-slate-950/80 p-2">
+              <div className="rounded-lg border border-emerald-500/35 bg-slate-900/60 p-2.5 dark:bg-gradient-to-br dark:from-emerald-950/40 dark:via-slate-900/60 dark:to-slate-950/80">
                 <div className="flex items-end justify-between gap-2">
                   <div>
                     <p className="label-mono text-emerald-300">Security otomatis</p>
@@ -320,18 +291,6 @@ export function AutoAuditBadge({
                   ))}
                 </ul>
               </div>
-            ) : null}
-
-            {auto && !autoFailed ? (
-              <button
-                type="button"
-                className="btn-secondary w-full px-2 py-1 text-[10px]"
-                onClick={onApplyAutoRubric}
-                title="Isi komponen rubrik juri (Produk/UX + Security) dengan nilai awal dari audit otomatis"
-              >
-                <IconSparkles className="h-3.5 w-3.5" />
-                {`Adopsi nilai awal · ${rubric?.total ?? 0}/85`}
-              </button>
             ) : null}
 
             <div className="grid grid-cols-2 gap-1.5">
@@ -410,38 +369,14 @@ export function AutoAuditBadge({
                 Tidak ada foto raster asli — waspadai ilustrasi SVG/dummy pada penilaian MVP.
               </p>
             ) : null}
-
-            <div className="flex flex-wrap gap-1.5">
-              <button
-                type="button"
-                className="btn-secondary flex-1 px-2 py-1 text-[10px]"
-                onClick={() => {
-                  onApplyHeaderScore(headerScore);
-                  toast(`Skor Headers diisi otomatis: ${headerScore} / 5.`, "success");
-                }}
-                disabled={audit.securityHeaders.length === 0}
-                title="Mengisi komponen 4.4 dari jumlah security header yang terdeteksi"
-              >
-                <IconCheckCircle className="h-3.5 w-3.5" />
-                Isi skor Headers {headerScore}/5
-              </button>
-              <button
-                type="button"
-                className="btn-ghost px-2 py-1 text-[10px]"
-                onClick={() => onChange(null)}
-              >
-                <IconX className="h-3.5 w-3.5" />
-                Hapus
-              </button>
-            </div>
           </>
         ) : (
           <div className="rounded-lg border border-dashed border-slate-700 bg-slate-950/40 px-2.5 py-3">
             <p className="text-[11px] font-semibold text-slate-200">Belum ada nilai sementara</p>
             <p className="mt-0.5 text-[10px] leading-relaxed text-slate-500">
               Audit otomatis berjalan sendiri saat panel juri dibuka. Klik{" "}
-              <span className="text-slate-300">Nilai Ulang</span> untuk mengulang, atau impor JSON
-              hasil audit manual. Penilaian juri tetap bisa dilakukan tanpa audit.
+              <span className="text-slate-300">Nilai Ulang</span> untuk mengulang. Penilaian juri
+              tetap bisa dilakukan tanpa audit.
             </p>
           </div>
         )}
@@ -449,7 +384,7 @@ export function AutoAuditBadge({
         <div className="flex flex-wrap gap-1.5">
           <button
             type="button"
-            className="btn-primary px-2 py-1 text-[10px]"
+            className="btn-primary w-full px-2.5 py-1.5 text-xs"
             onClick={runWorkerAudit}
             disabled={running}
           >
@@ -460,91 +395,7 @@ export function AutoAuditBadge({
             )}
             {running ? "Mengaudit…" : "Nilai Ulang"}
           </button>
-          <button
-            type="button"
-            className="btn-secondary px-2 py-1 text-[10px]"
-            onClick={() => fileRef.current?.click()}
-          >
-            <IconUpload className="h-3.5 w-3.5" />
-            Import JSON
-          </button>
-          <button
-            type="button"
-            className="btn-ghost px-2 py-1 text-[10px]"
-            onClick={() => setPasteOpen((prev) => !prev)}
-            aria-expanded={pasteOpen}
-          >
-            <IconClipboard className="h-3.5 w-3.5" />
-            Tempel JSON
-          </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="application/json,.json"
-            className="sr-only"
-            tabIndex={-1}
-            aria-hidden="true"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) void importFile(file);
-            }}
-          />
         </div>
-
-        {pasteOpen ? (
-          <div className="space-y-1.5 rounded-md border border-slate-700/70 bg-slate-950/50 p-2">
-            <label htmlFor="audit-json" className="label-mono">
-              Tempel JSON audit
-            </label>
-            <textarea
-              id="audit-json"
-              value={pasteValue}
-              onChange={(event) => setPasteValue(event.target.value)}
-              rows={5}
-              spellCheck={false}
-              placeholder={`{
-  "statusCode": 200,
-  "loadTimeSeconds": 1.4,
-  "rasterImages": 12,
-  "svgImages": 3,
-  "responsive": true,
-  "securityHeaders": ["content-security-policy", "x-content-type-options"],
-  "consoleErrors": 0
-}`}
-              className="input resize-y font-mono text-[10px] leading-relaxed"
-            />
-            <div className="flex justify-end gap-1.5">
-              <button
-                type="button"
-                className="btn-ghost px-2 py-1 text-[10px]"
-                onClick={() => setPasteOpen(false)}
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                className="btn-primary px-2 py-1 text-[10px]"
-                onClick={() => {
-                  try {
-                    const parsed = JSON.parse(pasteValue) as unknown;
-                    if (applyRawAudit(parsed, "manual")) {
-                      setPasteValue("");
-                      setPasteOpen(false);
-                    }
-                  } catch {
-                    const message = "JSON tidak valid. Periksa tanda kutip dan koma.";
-                    setInlineError(message);
-                    toast(message, "error");
-                  }
-                }}
-                disabled={!pasteValue.trim()}
-              >
-                <IconDownload className="h-3.5 w-3.5" />
-                Terapkan
-              </button>
-            </div>
-          </div>
-        ) : null}
 
         {inlineError ? (
           <div

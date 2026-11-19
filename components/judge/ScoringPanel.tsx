@@ -12,7 +12,6 @@ import {
   IconSparkles,
 } from "@/components/ui/icons";
 import { copyText, toast } from "@/lib/toast";
-import { auditFailed } from "@/lib/autoScore";
 import { entryAutoRubric, entryAutoSecurity, entryFinalScore } from "@/lib/ranking";
 import {
   PERSONAL_FIELDS,
@@ -32,7 +31,6 @@ interface ScoringPanelProps {
   total: number;
   onChange: (patch: Partial<ScoreDetail>) => void;
   onSave: () => void;
-  onAdoptAuto: () => void;
 }
 
 type TabId = "product" | "security" | "personal";
@@ -185,7 +183,6 @@ export function ScoringPanel({
   total,
   onChange,
   onSave,
-  onAdoptAuto,
 }: ScoringPanelProps) {
   const [tab, setTab] = useState<TabId>("product");
   const score = entry.score;
@@ -197,7 +194,6 @@ export function ScoringPanel({
   const autoRubric = entryAutoRubric(entry);
   const secAuto = entryAutoSecurity(entry);
   const provisional = autoRubric ? autoRubric.total : null;
-  const canAdopt = entry.audit ? !auditFailed(entry.audit) : false;
   const activePercent = Math.min(100, final.total);
   const updatedLabel = score.updatedAt
     ? new Date(score.updatedAt).toLocaleTimeString("id-ID", {
@@ -233,7 +229,7 @@ export function ScoringPanel({
       </div>
 
       <div className="px-3 py-3">
-        <div className="rounded-lg border border-rose-500/30 bg-gradient-to-br from-rose-950/50 via-slate-900/60 to-slate-950/80 p-2.5">
+        <div className="rounded-lg border border-rose-500/35 bg-slate-900/70 p-2.5 dark:bg-gradient-to-br dark:from-rose-950/50 dark:via-slate-900/60 dark:to-slate-950/80">
           <div className="flex items-end justify-between gap-2">
             <div>
               <p className="label-mono text-rose-300">Skor Juri · Rubrik 100</p>
@@ -297,7 +293,7 @@ export function ScoringPanel({
 
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-700/70">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-rose-600 via-rose-500 to-amber-400 transition-all"
+              className="h-full rounded-full bg-rose-600 transition-all dark:bg-gradient-to-r dark:from-rose-600 dark:via-rose-500 dark:to-amber-400"
               style={{ width: `${activePercent}%` }}
             />
           </div>
@@ -318,19 +314,7 @@ export function ScoringPanel({
             ))}
           </dl>
 
-          {canAdopt ? (
-            <button
-              type="button"
-              className="btn-ghost mt-2 w-full py-1 text-[10px]"
-              onClick={onAdoptAuto}
-              title="Isi komponen rubrik dengan nilai awal dari audit otomatis"
-            >
-              <IconSparkles className="h-3.5 w-3.5" />
-              Adopsi nilai otomatis sebagai awal rubrik
-            </button>
-          ) : null}
-
-          <button type="button" className="btn-success mt-1.5 w-full py-1.5 text-xs" onClick={onSave}>
+          <button type="button" className="btn-success mt-2.5 w-full py-1.5 text-xs" onClick={onSave}>
             <IconSave className="h-3.5 w-3.5" />
             Simpan Skor &amp; Tandai Selesai
           </button>

@@ -216,7 +216,7 @@ export function BulkAutoAudit({ entries, onAudit }: BulkAutoAuditProps) {
 
         <div className="h-1.5 overflow-hidden rounded-full bg-slate-700/70">
           <div
-            className="h-full rounded-full bg-gradient-to-r from-sky-500 to-emerald-500 transition-all"
+            className="h-full rounded-full bg-emerald-600 transition-all dark:bg-gradient-to-r dark:from-sky-500 dark:to-emerald-500"
             style={{ width: `${percent}%` }}
           />
         </div>

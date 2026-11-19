@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { ResetSessionButton } from "@/components/layout/ResetSessionButton";
+import { WinnersPodiumModal } from "@/components/leaderboard/WinnersPodiumModal";
 import {
   IconAlertTriangle,
   IconDownload,
@@ -47,6 +48,7 @@ export default function LeaderboardPage() {
   const [filter, setFilter] = useState<StatusFilter>("all");
   const [exporting, setExporting] = useState(false);
   const [popupBlocked, setPopupBlocked] = useState(false);
+  const [podiumOpen, setPodiumOpen] = useState(false);
 
   const ranked = useMemo(
     () =>
@@ -195,6 +197,15 @@ export default function LeaderboardPage() {
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <ResetSessionButton className="btn-ghost px-2 py-1.5 text-[11px]" label="Reset" />
+          <button
+            type="button"
+            className="btn border-amber-500/50 bg-amber-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-amber-400"
+            onClick={() => setPodiumOpen(true)}
+            disabled={ranked.length === 0}
+          >
+            <IconTrophy className="h-3.5 w-3.5" />
+            Panggung Juara
+          </button>
           <button
             type="button"
             className="btn-primary px-2.5 py-1.5 text-[11px]"
@@ -583,6 +594,12 @@ export default function LeaderboardPage() {
           </button>
         </div>
       </section>
+
+      <WinnersPodiumModal
+        open={podiumOpen}
+        entries={ranked.map((item) => item.entry)}
+        onClose={() => setPodiumOpen(false)}
+      />
     </main>
   );
 }
