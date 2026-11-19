@@ -68,6 +68,13 @@ function toTextOrNull(value: unknown): string | null {
   return trimmed ? trimmed.slice(0, 400) : null;
 }
 
+function toDataUrlOrNull(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("data:image/")) return null;
+  return trimmed.slice(0, 1_500_000);
+}
+
 /** Normalize a list of short strings (path/secret names) => string[] | null. */
 function normalizeStringList(value: unknown): string[] | null {
   if (value === null || value === undefined) return null;
@@ -270,7 +277,7 @@ export function normalizeAudit(
     stockGuardDetected: toBooleanOrNull(
       pick(record, ["stockGuardDetected", "stock_guard_detected"]),
     ),
-    screenshotDataUrl: toTextOrNull(
+    screenshotDataUrl: toDataUrlOrNull(
       pick(record, ["screenshotDataUrl", "screenshot_data_url", "screenshot"]),
     ),
     locked: toBooleanOrNull(pick(record, ["locked", "isLocked", "requiresLogin"])),
