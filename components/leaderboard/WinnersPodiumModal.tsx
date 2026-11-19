@@ -751,11 +751,109 @@ export function WinnersPodiumModal({
           </div>
         ) : null}
 
-        {/* Overlay Zoom Pemenang / Jeda Mendebarkan */}
+        {/* Podium 2 - 1 - 3 (selalu tampil agar transisi Next & Auto Run smooth) */}
+        <div className="relative mt-8 grid flex-1 grid-cols-1 items-end gap-4 sm:grid-cols-3 sm:gap-5">
+          {podiumOrder.map((rank) => {
+            const item = winners.find((w) => w.rank === rank);
+            if (!item) return <div key={rank} className="hidden sm:block" />;
+            const visible = placedRanks.has(rank);
+            const highlighted = config.highlightRank === rank && visible;
+            const suspenseCenter = isSuspense && rank === 1;
+            const heightClass =
+              rank === 1 ? "min-h-[225px]" : rank === 2 ? "min-h-[175px]" : "min-h-[142px]";
+            const badgeStyle =
+              rank === 1
+                ? "bg-gradient-to-b from-[#fde047] to-[#eab308] text-[#1e1b4b] ring-4 ring-[#fef08a]/40 shadow-[0_0_28px_rgba(250,204,21,0.55)]"
+                : rank === 2
+                  ? "bg-gradient-to-b from-[#f8fafc] to-[#cbd5e1] text-[#0f172a] ring-4 ring-white/30"
+                  : "bg-gradient-to-b from-[#fdba74] to-[#ea580c] text-[#1e1b4b] ring-4 ring-[#fed7aa]/30";
+            const pillarBorder =
+              rank === 1
+                ? "border-t-[#fde047] bg-gradient-to-b from-[#2e1a70] to-[#190b44]"
+                : rank === 2
+                  ? "border-t-[#e2e8f0] bg-gradient-to-b from-[#26165e] to-[#160a3c]"
+                  : "border-t-[#fb923c] bg-gradient-to-b from-[#26165e] to-[#160a3c]";
+
+            return (
+              <button
+                key={rank}
+                type="button"
+                onClick={() => {
+                  if (!visible) return;
+                  updateConfig((prev) => ({ ...prev, highlightRank: rank }));
+                  playSpotlightClick(soundOn);
+                }}
+                className="group relative flex flex-col items-center text-center transition-all duration-500"
+              >
+                {/* Animasi Lampu Sorot Lingkaran ala Kahoot di atas Podium 1 */}
+                {suspenseCenter ? (
+                  <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute -top-20 left-1/2 z-0 h-44 w-44 -translate-x-1/2 rounded-full bg-[#3b82f6]/55 blur-md animate-pulse ring-4 ring-[#fde047]/50"
+                  />
+                ) : null}
+
+                {/* Nama pemenang (tersembunyi sebelum diumumkan) */}
+                <div
+                  className={`relative z-10 mb-3 w-full px-2 transition-all duration-500 ${
+                    visible ? "translate-y-0 opacity-100" : "translate-y-4 opacity-40"
+                  }`}
+                >
+                  <div className="inline-flex items-center gap-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-[#ddd6fe]">
+                    {rank === 1 ? (
+                      <CrownSvg className="h-4 w-4 text-[#fbbf24]" />
+                    ) : (
+                      <MedalSvg
+                        className="h-4 w-4"
+                        color={rank === 2 ? "#e2e8f0" : "#fb923c"}
+                      />
+                    )}
+                    <span>Juara {rank}</span>
+                  </div>
+                  <p
+                    className={`mt-1 truncate text-lg font-black tracking-tight sm:text-xl ${
+                      highlighted ? "text-[#fde047]" : "text-white"
+                    }`}
+                  >
+                    {visible ? hostOf(item.entry.url) : suspenseCenter ? "…" : "???"}
+                  </p>
+                </div>
+
+                {/* Pilar podium gelap */}
+                <div
+                  className={`relative z-10 flex w-full flex-col items-center justify-start rounded-t-2xl border-x border-t-4 border-white/10 px-4 pt-5 pb-4 shadow-[0_-8px_40px_rgba(0,0,0,0.45)] transition-all duration-500 ${heightClass} ${pillarBorder} ${
+                    highlighted
+                      ? "ring-2 ring-[#fde047]/70 shadow-[0_0_45px_rgba(250,204,21,0.28)]"
+                      : suspenseCenter
+                        ? "ring-4 ring-[#fde047]/80 shadow-[0_0_65px_rgba(59,130,246,0.55)]"
+                        : ""
+                  }`}
+                >
+                  <div
+                    className={`flex h-14 w-14 items-center justify-center rounded-full text-2xl font-black ${badgeStyle} ${
+                      suspenseCenter ? "animate-bounce" : ""
+                    }`}
+                  >
+                    {rank}
+                  </div>
+                  <p className="mt-3 font-mono text-xl font-black text-white">
+                    {visible ? item.score : "—"}
+                    <span className="ml-1 text-xs font-semibold text-[#c4b5fd]">/ 100</span>
+                  </p>
+                  <span className="mt-1 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-[#c4b5fd]">
+                    {rank === 1 ? "Champion" : rank === 2 ? "Runner-up" : "3rd Place"}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Floating Zoom Card Overlay (tidak menyembunyikan podium di belakangnya) */}
         {zoomedWinner ? (
-          <div className="my-6 flex flex-1 items-center justify-center">
+          <div className="pointer-events-none fixed inset-0 z-30 flex items-center justify-center bg-[#0d0428]/55 p-4 backdrop-blur-[2px] transition-opacity duration-300">
             <div
-              className={`w-full max-w-lg animate-fade-up rounded-3xl border-2 px-6 py-8 text-center shadow-[0_0_80px_rgba(250,204,21,0.45)] backdrop-blur-md ${
+              className={`pointer-events-auto w-full max-w-lg animate-fade-up rounded-3xl border-2 px-6 py-8 text-center shadow-[0_0_80px_rgba(250,204,21,0.45)] backdrop-blur-md ${
                 zoomedWinner.rank === 1
                   ? "scale-105 border-[#fde047] bg-gradient-to-b from-[#3b1c8c]/95 to-[#1b084f]/95"
                   : "border-white/30 bg-[#251263]/95"
@@ -784,109 +882,7 @@ export function WinnersPodiumModal({
               </div>
             </div>
           </div>
-        ) : isSuspense ? (
-          <div className="my-6 flex flex-1 items-center justify-center">
-            <div className="w-full max-w-md rounded-3xl border border-[#fde047]/60 bg-[#24105e]/90 px-6 py-10 text-center shadow-[0_0_90px_rgba(250,204,21,0.4)]">
-              <div className="mx-auto flex h-20 w-20 animate-bounce items-center justify-center rounded-full border-4 border-[#fde047] bg-[#fbbf24]/20 text-[#fde047]">
-                <CrownSvg className="h-10 w-10" />
-              </div>
-              <p className="mt-4 font-mono text-xs font-bold uppercase tracking-[0.25em] text-[#fde68a]">
-                Momen Puncak
-              </p>
-              <h3 className="mt-2 text-3xl font-black tracking-tight text-white">
-                Siapakah Juara 1?
-              </h3>
-              <p className="mt-2 text-xs text-[#ddd6fe]">
-                Lampu sorot mengarah ke Podium Utama…
-              </p>
-            </div>
-          </div>
-        ) : (
-          /* Podium 2 - 1 - 3 */
-          <div className="mt-8 grid flex-1 grid-cols-1 items-end gap-4 sm:grid-cols-3 sm:gap-5">
-            {podiumOrder.map((rank) => {
-              const item = winners.find((w) => w.rank === rank);
-              if (!item) return <div key={rank} className="hidden sm:block" />;
-              const visible = placedRanks.has(rank);
-              const highlighted = config.highlightRank === rank && visible;
-              const heightClass =
-                rank === 1 ? "min-h-[225px]" : rank === 2 ? "min-h-[175px]" : "min-h-[142px]";
-              const badgeStyle =
-                rank === 1
-                  ? "bg-gradient-to-b from-[#fde047] to-[#eab308] text-[#1e1b4b] ring-4 ring-[#fef08a]/40 shadow-[0_0_28px_rgba(250,204,21,0.55)]"
-                  : rank === 2
-                    ? "bg-gradient-to-b from-[#f8fafc] to-[#cbd5e1] text-[#0f172a] ring-4 ring-white/30"
-                    : "bg-gradient-to-b from-[#fdba74] to-[#ea580c] text-[#1e1b4b] ring-4 ring-[#fed7aa]/30";
-              const pillarBorder =
-                rank === 1
-                  ? "border-t-[#fde047] bg-gradient-to-b from-[#2e1a70] to-[#190b44]"
-                  : rank === 2
-                    ? "border-t-[#e2e8f0] bg-gradient-to-b from-[#26165e] to-[#160a3c]"
-                    : "border-t-[#fb923c] bg-gradient-to-b from-[#26165e] to-[#160a3c]";
-
-              return (
-                <button
-                  key={rank}
-                  type="button"
-                  onClick={() => {
-                    if (!visible) return;
-                    updateConfig((prev) => ({ ...prev, highlightRank: rank }));
-                    playSpotlightClick(soundOn);
-                  }}
-                  className="group flex flex-col items-center text-center transition-all duration-500"
-                >
-                  {/* Nama pemenang (tersembunyi sebelum diumumkan) */}
-                  <div
-                    className={`mb-3 w-full px-2 transition-all duration-500 ${
-                      visible ? "translate-y-0 opacity-100" : "translate-y-4 opacity-30"
-                    }`}
-                  >
-                    <div className="inline-flex items-center gap-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-[#ddd6fe]">
-                      {rank === 1 ? (
-                        <CrownSvg className="h-4 w-4 text-[#fbbf24]" />
-                      ) : (
-                        <MedalSvg
-                          className="h-4 w-4"
-                          color={rank === 2 ? "#e2e8f0" : "#fb923c"}
-                        />
-                      )}
-                      <span>Juara {rank}</span>
-                    </div>
-                    <p
-                      className={`mt-1 truncate text-lg font-black tracking-tight sm:text-xl ${
-                        highlighted ? "text-[#fde047]" : "text-white"
-                      }`}
-                    >
-                      {visible ? hostOf(item.entry.url) : "???"}
-                    </p>
-                  </div>
-
-                  {/* Pilar podium gelap */}
-                  <div
-                    className={`flex w-full flex-col items-center justify-start rounded-t-2xl border-x border-t-4 border-white/10 px-4 pt-5 pb-4 shadow-[0_-8px_40px_rgba(0,0,0,0.45)] transition-all duration-500 ${heightClass} ${pillarBorder} ${
-                      highlighted
-                        ? "ring-2 ring-[#fde047]/70 shadow-[0_0_45px_rgba(250,204,21,0.28)]"
-                        : ""
-                    }`}
-                  >
-                    <div
-                      className={`flex h-14 w-14 items-center justify-center rounded-full text-2xl font-black ${badgeStyle}`}
-                    >
-                      {rank}
-                    </div>
-                    <p className="mt-3 font-mono text-xl font-black text-white">
-                      {visible ? item.score : "—"}
-                      <span className="ml-1 text-xs font-semibold text-[#c4b5fd]">/ 100</span>
-                    </p>
-                    <span className="mt-1 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-[#c4b5fd]">
-                      {rank === 1 ? "Champion" : rank === 2 ? "Runner-up" : "3rd Place"}
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        )}
+        ) : null}
 
         {/* Peringkat 4 & 5 */}
         {config.topCount === 5 && topFourFive.length > 0 ? (

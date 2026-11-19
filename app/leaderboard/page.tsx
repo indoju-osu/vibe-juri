@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ResetSessionButton } from "@/components/layout/ResetSessionButton";
 import { WinnersPodiumModal } from "@/components/leaderboard/WinnersPodiumModal";
 import {
   IconAlertTriangle,
+  IconCheckCircle,
   IconDownload,
   IconExternal,
   IconGauge,
@@ -17,6 +18,7 @@ import {
   IconTrophy,
   IconX,
 } from "@/components/ui/icons";
+import { seedUntouchedScore } from "@/lib/autoScore";
 import { EXPORT_FILENAME, exportSessionToXlsx } from "@/lib/exporter";
 import { entryBreakdown, sessionStats, sortEntries } from "@/lib/ranking";
 import { focusPreviewWindow, openPreviewWindow } from "@/lib/splitWindow";
@@ -49,6 +51,8 @@ export default function LeaderboardPage() {
   const [exporting, setExporting] = useState(false);
   const [popupBlocked, setPopupBlocked] = useState(false);
   const [podiumOpen, setPodiumOpen] = useState(false);
+  const [bgmEnabled, setBgmEnabled] = useState(true);
+  const bgmRef = useRef<HTMLAudioElement | null>(null);
 
   const ranked = useMemo(
     () =>
@@ -83,6 +87,47 @@ export default function LeaderboardPage() {
     setPopupBlocked(false);
   }, [session]);
 
+  useEffect(() => {
+    if (!bgmEnabled || podiumOpen) {
+      if (bgmRef.current) {
+        bgmRef.current.pause();
+      }
+      return;
+    }
+
+    if (!bgmRef.current) {
+      bgmRef.current = new Audio("/audio/ceremony-bgm.mp3");
+      bgmRef.current.loop = true;
+      bgmRef.current.volume = 0.4;
+    }
+
+    const tryPlay = () => {
+      if (!bgmRef.current || !bgmEnabled || podiumOpen) return;
+      void bgmRef.current.play().catch(() => {});
+    };
+
+    tryPlay();
+    const onInteract = () => {
+      tryPlay();
+    };
+    window.addEventListener("pointerdown", onInteract, { once: true });
+    window.addEventListener("keydown", onInteract, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", onInteract);
+      window.removeEventListener("keydown", onInteract);
+    };
+  }, [bgmEnabled, podiumOpen]);
+
+  useEffect(
+    () => () => {
+      if (bgmRef.current) {
+        bgmRef.current.pause();
+        bgmRef.current.currentTime = 0;
+      }
+    },
+    [],
+  );
+
   const reviewEntry = (entry: JudgeEntry, sourceIndex: number) => {
     const popup = openPreviewWindow(entry.url);
     if (!popup) {
@@ -113,6 +158,26 @@ export default function LeaderboardPage() {
       });
     }
     router.push("/judge");
+  };
+
+  const markAllJudged = () => {
+    if (!session || counts.pending === 0) return;
+    const now = new Date().toISOString();
+    let changed = 0;
+    update((draft) => {
+      for (const entry of draft.entries) {
+        if (!entry.score.judged) {
+          const seeded = seedUntouchedScore(entry.score, entry.audit);
+          entry.score = {
+            ...seeded,
+            judged: true,
+            updatedAt: now,
+          };
+          changed += 1;
+        }
+      }
+    });
+    toast(`${changed} karya diubah statusnya menjadi Dinilai Juri.`, "success");
   };
 
   const handleExport = async () => {
@@ -199,6 +264,14 @@ export default function LeaderboardPage() {
           <ResetSessionButton className="btn-ghost px-2 py-1.5 text-[11px]" label="Reset" />
           <button
             type="button"
+            className="btn-secondary px-2.5 py-1.5 text-[11px]"
+            onClick={() => setBgmEnabled((prev) => !prev)}
+            title="Toggle musik latar halaman klasemen"
+          >
+            {bgmEnabled ? "Musik: On" : "Musik: Off"}
+          </button>
+          <button
+            type="button"
             className="btn border-amber-500/50 bg-amber-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-amber-400"
             onClick={() => setPodiumOpen(true)}
             disabled={ranked.length === 0}
@@ -279,10 +352,20 @@ export default function LeaderboardPage() {
                 {filtered.length} karya ditampilkan
               </h2>
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               <span className="chip border-slate-600 bg-slate-900 text-slate-400">
                 {session.ignored.length} diabaikan
               </span>
+              <button
+                type="button"
+                onClick={markAllJudged}
+                disabled={counts.pending === 0}
+                title="Tandai semua karya yang masih berstatus Sementara menjadi Dinilai Juri"
+                className="btn-success px-2.5 py-1 text-[11px]"
+              >
+                <IconCheckCircle className="h-3.5 w-3.5" />
+                Selesai Semua
+              </button>
               <span className="hidden font-mono text-[10px] text-slate-500 sm:inline">
                 {EXPORT_FILENAME}
               </span>
@@ -369,16 +452,6 @@ export default function LeaderboardPage() {
                   Personal
                   <span className="block font-mono text-[9px] normal-case text-slate-500">/15</span>
                 </th>
-                <th scope="col" className="w-24 px-2 py-2 text-center font-semibold text-sky-300">
-                  Otomatis
-                  <span className="block font-mono text-[9px] normal-case text-slate-500">
-                    Prod+Sec /85
-                  </span>
-                </th>
-                <th scope="col" className="w-20 px-2 py-2 text-center font-semibold">
-                  Juri
-                  <span className="block font-mono text-[9px] normal-case text-slate-500">/100</span>
-                </th>
                 <th scope="col" className="w-20 px-2 py-2 text-center font-semibold text-rose-300">
                   Akhir
                   <span className="block font-mono text-[9px] normal-case text-slate-500">/100</span>
@@ -390,7 +463,7 @@ export default function LeaderboardPage() {
             <tbody className="divide-y divide-slate-800/80">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-3 py-10 text-center text-xs text-slate-500">
+                  <td colSpan={8} className="px-3 py-10 text-center text-xs text-slate-500">
                     Tidak ada karya yang cocok dengan pencarian / filter.
                   </td>
                 </tr>
@@ -467,38 +540,6 @@ export default function LeaderboardPage() {
                       </td>
                       <td className="px-2 py-2 text-center font-mono text-[11px] text-amber-300">
                         {breakdown.personal}
-                      </td>
-                      <td className="px-2 py-2 text-center">
-                        <span
-                          className={`font-mono text-[11px] ${
-                            breakdown.provisional === null
-                              ? "text-slate-600"
-                              : breakdown.source === "auto"
-                                ? "font-bold text-sky-200"
-                                : "text-sky-400/70"
-                          }`}
-                          title={
-                            breakdown.provisional === null
-                              ? "Belum diaudit otomatis"
-                              : `Produk/UX ${breakdown.autoProduct}/60 + Security ${breakdown.secAuto}/25 = ${breakdown.provisional}/85 · Produk detail: MVP ${breakdown.autoMvp} · UI/UX ${breakdown.autoUiux} · Fitur ${breakdown.autoFeatures} · Performa ${breakdown.autoPerformance}`
-                          }
-                        >
-                          {breakdown.provisional ?? "—"}
-                        </span>
-                      </td>
-                      <td className="px-2 py-2 text-center">
-                        <span
-                          className={`font-mono text-[11px] ${
-                            entry.score.judged
-                              ? "font-bold text-emerald-200"
-                              : entry.score.updatedAt
-                                ? "text-amber-300/80"
-                                : "text-slate-600"
-                          }`}
-                          title={entry.score.judged ? "Nilai juri (final)" : "Draft juri / default 0"}
-                        >
-                          {breakdown.judge}
-                        </span>
                       </td>
                       <td className="px-2 py-2 text-center">
                         <span

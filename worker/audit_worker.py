@@ -388,8 +388,8 @@ async def audit_url(url: str) -> dict:
 
         try:
             await page.set_viewport_size({"width": 1366, "height": 768})
-            response = await page.goto(url, wait_until="networkidle", timeout=25000)
-            await page.wait_for_timeout(1200)
+            response = await page.goto(url, wait_until="load", timeout=12000)
+            await page.wait_for_timeout(1000)
             result["loadTimeSeconds"] = round(time.time() - started, 2)
 
             status = response.status if response else 0

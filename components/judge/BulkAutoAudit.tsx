@@ -13,7 +13,7 @@ import { toast } from "@/lib/toast";
 import type { AuditResult, JudgeEntry } from "@/types";
 
 const ENABLED_KEY = "vibe-juri.autoaudit.v1";
-const CONCURRENCY = 2;
+const CONCURRENCY = 1;
 
 interface BulkAutoAuditProps {
   entries: JudgeEntry[];

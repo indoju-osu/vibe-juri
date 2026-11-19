@@ -47,9 +47,6 @@ export default function JudgePage() {
       update((draft) => {
         draft.activeIndex = Math.max(0, Math.min(draft.entries.length - 1, nextIndex));
       });
-      if (typeof window !== "undefined") {
-        window.scrollTo({ top: 0, behavior: "smooth" });
-      }
     },
     [update],
   );
