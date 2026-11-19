@@ -68,6 +68,12 @@ export interface AuditResult {
   pathsProbed: number | null;
   pathsGuarded: number | null;
   pathsOpen: string[] | null;
+  clientAuthProtected: boolean | null;
+
+  /* --- Interactive / functional heuristic probes (worker only) --- */
+  searchWorks: boolean | null;
+  negativeQtyRejected: boolean | null;
+  stockGuardDetected: boolean | null;
 
   locked: boolean | null;
   platformError: boolean | null;

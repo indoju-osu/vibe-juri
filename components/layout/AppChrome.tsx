@@ -2,12 +2,52 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   IconGauge,
   IconLayout,
   IconLink,
+  IconMoon,
+  IconSun,
   IconTrophy,
 } from "@/components/ui/icons";
+
+const THEME_STORAGE_KEY = "vibe-juri.theme.v1";
+
+function ThemeToggle() {
+  const [dark, setDark] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    setDark(document.documentElement.classList.contains("dark"));
+  }, []);
+
+  const toggle = () => {
+    const nextDark = !dark;
+    setDark(nextDark);
+    document.documentElement.classList.toggle("dark", nextDark);
+    document.documentElement.style.colorScheme = nextDark ? "dark" : "light";
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, nextDark ? "dark" : "light");
+    } catch {
+      /* ignore storage errors */
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      aria-label={dark ? "Ganti ke tema terang" : "Ganti ke tema gelap"}
+      title={dark ? "Tema Gelap aktif (klik untuk Mode Terang)" : "Tema Terang aktif (klik untuk Mode Gelap)"}
+      className="ml-1 inline-flex items-center gap-1.5 rounded-lg border border-slate-700/80 bg-slate-900/70 px-2 py-1.5 text-[11px] font-semibold text-slate-300 transition-colors hover:bg-slate-800 hover:text-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/60 sm:px-2.5 sm:text-xs"
+    >
+      {mounted && dark ? <IconSun className="h-3.5 w-3.5" /> : <IconMoon className="h-3.5 w-3.5" />}
+      <span className="hidden lg:inline">{mounted && dark ? "Light" : "Dark"}</span>
+    </button>
+  );
+}
 
 const NAV_ITEMS = [
   { href: "/", label: "Import", icon: IconLink },
@@ -62,6 +102,7 @@ export function AppHeader() {
               </Link>
             );
           })}
+          <ThemeToggle />
         </nav>
       </div>
     </header>

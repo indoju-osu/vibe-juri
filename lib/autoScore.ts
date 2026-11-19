@@ -326,7 +326,17 @@ export function autoSecurityFromAudit(audit: AuditResult): AutoSecurity {
     auth = Math.round(5 * (guarded / probed));
     if (pathsOpen.length > 0) {
       auth = Math.min(auth, Math.max(0, 5 - pathsOpen.length * 2));
-      notes.push(`Rute sensitif dapat diakses langsung: ${pathsOpen.join(", ")}`);
+      if (audit.clientAuthProtected === true) {
+        auth = Math.max(auth, 2);
+        notes.push(`Form login client-side terdeteksi, namun ada rute terbuka: ${pathsOpen.join(", ")}`);
+      } else {
+        notes.push(`Rute sensitif dapat diakses langsung: ${pathsOpen.join(", ")}`);
+      }
+    } else if (audit.clientAuthProtected === true) {
+      auth = Math.max(auth, 3);
+      notes.push(
+        "Proteksi rute admin berbasis client-side (form login terdeteksi di browser, belum server-side 401/302)",
+      );
     } else if (guarded === 0) {
       notes.push(
         "Rute sensitif tidak dapat diverifikasi otomatis (aplikasi client-rendered / tanpa rute server)",
@@ -336,9 +346,31 @@ export function autoSecurityFromAudit(audit: AuditResult): AutoSecurity {
     }
   }
 
-  /* 4.5 Logika bisnis (5) — khusus penilaian juri -------------------------------- */
-  const logic = 0;
-  notes.push("Validasi logika bisnis & tampering tetap dinilai manual oleh juri");
+  /* 4.5 Logika bisnis (5) — heuristik otomatis + verifikasi juri ----------------- */
+  let logic = 0;
+  const hasLogicProbes =
+    audit.negativeQtyRejected !== null ||
+    audit.stockGuardDetected !== null ||
+    audit.searchWorks !== null;
+  if (hasLogicProbes) {
+    if (audit.negativeQtyRejected === true) logic += 2;
+    else if (audit.negativeQtyRejected === false) {
+      notes.push("Input jumlah negatif (-1) tidak ditolak / berpotensi total minus");
+    }
+    if (audit.stockGuardDetected === true) logic += 2;
+    else if (audit.stockGuardDetected === false) {
+      notes.push("Batas stok / input jumlah ekstrem (999999) belum tervalidasi");
+    }
+    if (audit.searchWorks === true) logic += 1;
+    else if (audit.searchWorks === false) {
+      notes.push("Kolom pencarian tidak merespons perubahan daftar produk");
+    }
+    if (logic > 0) {
+      notes.push(`Uji fungsi & logika otomatis (${logic}/5) — verifikasi manual tetap disarankan`);
+    }
+  } else {
+    notes.push("Validasi logika bisnis & tampering tetap dinilai manual oleh juri");
+  }
 
   return {
     xss,

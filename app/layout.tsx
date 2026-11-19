@@ -14,12 +14,17 @@ export const metadata: Metadata = {
   keywords: ["vibe coding", "hackathon", "penjurian", "security audit", "OWASP"],
   authors: [{ name: "Vibe-Juri" }],
   viewport: "width=device-width, initial-scale=1",
-  themeColor: "#020617",
+  themeColor: "#f8fafc",
 };
+
+const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem('vibe-juri.theme.v1');if(t==='dark'){document.documentElement.classList.add('dark');document.documentElement.style.colorScheme='dark';}else{document.documentElement.classList.remove('dark');document.documentElement.style.colorScheme='light';}}catch(e){}})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="id" className="dark">
+    <html lang="id" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body className="flex min-h-dvh flex-col bg-slate-950 font-sans text-slate-50">
         <a
           href="#konten-utama"

@@ -75,6 +75,7 @@ def _scan_secrets(text: str, found: set[str]) -> None:
 
 async def run_security_probes(
     context,
+    page,
     page_url: str,
     html: str,
     home_title: str | None,
@@ -126,6 +127,7 @@ async def run_security_probes(
     paths_probed = 0
     paths_guarded = 0
     paths_open: list[str] = []
+    client_auth_protected: bool | None = None
     for path in PROBE_PATHS:
         status, headers, body = await get(origin + path)
         if status is None:
@@ -135,13 +137,30 @@ async def run_security_probes(
             paths_guarded += 1
         elif status == 200:
             content_type = headers.get("content-type", "").lower()
-            if "json" in content_type:
+            stripped = body.lstrip()
+            is_json_body = "json" in content_type or stripped.startswith(("{", "["))
+            if path.startswith("/api/"):
+                if is_json_body:
+                    paths_open.append(path)
+                continue
+            if is_json_body:
                 paths_open.append(path)
                 continue
             title_match = re.search(r"<title[^>]*>(.*?)</title>", body, re.I | re.S)
             title = title_match.group(1).strip() if title_match else None
             if title == home_title and abs(len(body) - home_len) < 300:
                 continue
+            if path == "/admin":
+                try:
+                    await page.goto(origin + "/admin", wait_until="domcontentloaded", timeout=4500)
+                    await page.wait_for_timeout(450)
+                    final_url = page.url.lower()
+                    has_pw = await page.locator('input[type="password"]').count() > 0
+                    if has_pw or any(tok in final_url for tok in ("login", "signin", "sign-in", "auth")):
+                        client_auth_protected = True
+                        continue
+                except Exception:  # noqa: BLE001
+                    pass
             paths_open.append(path)
 
     return {
@@ -152,6 +171,99 @@ async def run_security_probes(
         "pathsProbed": paths_probed,
         "pathsGuarded": paths_guarded,
         "pathsOpen": paths_open,
+        "clientAuthProtected": client_auth_protected,
+    }
+
+
+async def run_functional_probes(page) -> dict:
+    """Uji heuristik cepat (<= 3 dtk) untuk search, keranjang, input negatif (-1), dan batas stok."""
+    search_works: bool | None = None
+    negative_qty_rejected: bool | None = None
+    stock_guard_detected: bool | None = None
+
+    # 1. Uji kolom pencarian
+    try:
+        search_loc = page.locator(
+            'input[type="search"], input[placeholder*="cari" i], input[aria-label*="cari" i], input[placeholder*="search" i]'
+        ).first
+        if await search_loc.count() > 0 and await search_loc.is_visible():
+            before_len = await page.evaluate("() => document.body.innerText.trim().length")
+            await search_loc.fill("zzznomatch99", timeout=1500)
+            await page.wait_for_timeout(250)
+            after_len = await page.evaluate("() => document.body.innerText.trim().length")
+            await search_loc.fill("", timeout=1500)
+            await page.wait_for_timeout(150)
+            search_works = abs(after_len - before_len) >= 15
+    except Exception:  # noqa: BLE001
+        pass
+
+    # 2. Cek apakah produk bertuliskan "stok habis" menonaktifkan tombol beli
+    try:
+        out_of_stock_disabled = await page.evaluate(
+            """() => {
+              const cards = Array.from(document.querySelectorAll('article, [class*="card"], [class*="product"]'));
+              for (const c of cards) {
+                const txt = (c.innerText || '').toLowerCase();
+                if (/stok\\s*habis|out\\s*of\\s*stock|sold\\s*out/.test(txt)) {
+                  const btn = c.querySelector('button');
+                  if (btn && btn.disabled) return true;
+                }
+              }
+              return null;
+            }"""
+        )
+        if out_of_stock_disabled is True:
+            stock_guard_detected = True
+    except Exception:  # noqa: BLE001
+        pass
+
+    # 3. Klik tombol keranjang/beli pertama yang aktif, lalu uji input angka (-1 & 999999)
+    try:
+        await page.evaluate(
+            """() => {
+              const btns = Array.from(document.querySelectorAll('button:not([disabled])'));
+              const target = btns.find((b) => /keranjang|beli|pesan|cart|tambah/i.test((b.innerText || '') + ' ' + (b.title || '')));
+              if (target) target.click();
+            }"""
+        )
+        await page.wait_for_timeout(350)
+
+        num_loc = page.locator('input[type="number"]:visible').first
+        if await num_loc.count() > 0:
+            await num_loc.fill("-1", timeout=1500)
+            await num_loc.dispatch_event("change")
+            await page.wait_for_timeout(150)
+            val_neg = await num_loc.input_value()
+            neg_check = await page.evaluate(
+                """() => {
+                  const txt = document.body.innerText || '';
+                  const hasMinusPrice = /(?:^|[\\s:])[-−]\\s*rp\\s*\\d|rp\\s*[-−]\\s*\\d/i.test(txt);
+                  const hasErr = /tidak valid|minimal|negatif|kurang dari|harus lebih/i.test(txt);
+                  return { hasMinusPrice, hasErr };
+                }"""
+            )
+            if neg_check["hasMinusPrice"]:
+                negative_qty_rejected = False
+            elif val_neg == "-1" and not neg_check["hasErr"]:
+                negative_qty_rejected = False
+            else:
+                negative_qty_rejected = True
+
+            await num_loc.fill("999999", timeout=1500)
+            await num_loc.dispatch_event("change")
+            await page.wait_for_timeout(150)
+            val_big = await num_loc.input_value()
+            has_stock_msg = await page.evaluate(
+                """() => /melebihi\\s*stok|stok\\s*tidak\\s*cukup|maksimal\\s*stok|batas\\s*stok|tersisa/i.test(document.body.innerText || '')"""
+            )
+            stock_guard_detected = (val_big != "999999") or bool(has_stock_msg) or (stock_guard_detected is True)
+    except Exception:  # noqa: BLE001
+        pass
+
+    return {
+        "searchWorks": search_works,
+        "negativeQtyRejected": negative_qty_rejected,
+        "stockGuardDetected": stock_guard_detected,
     }
 
 
@@ -256,6 +368,10 @@ async def audit_url(url: str) -> dict:
         "pathsProbed": None,
         "pathsGuarded": None,
         "pathsOpen": None,
+        "clientAuthProtected": None,
+        "searchWorks": None,
+        "negativeQtyRejected": None,
+        "stockGuardDetected": None,
         "locked": None,
         "platformError": None,
         "error": None,
@@ -336,10 +452,23 @@ async def audit_url(url: str) -> dict:
                 }
             )
 
+            await page.set_viewport_size({"width": 375, "height": 812})
+            await page.wait_for_timeout(400)
+            result["responsive"] = await page.evaluate(
+                "() => document.documentElement.scrollWidth <= window.innerWidth + 5"
+            )
+
+            await page.set_viewport_size({"width": 1366, "height": 768})
+            try:
+                func_probes = await run_functional_probes(page)
+                result.update(func_probes)
+            except Exception:  # noqa: BLE001
+                pass
+
             result["httpsEnabled"] = page.url.startswith("https://")
             try:
                 html = await page.content()
-                probes = await run_security_probes(context, page.url, html, title or None)
+                probes = await run_security_probes(context, page, page.url, html, title or None)
                 result.update(probes)
             except Exception:  # noqa: BLE001
                 # Audit inti tetap valid walau probe keamanan gagal.
@@ -349,11 +478,7 @@ async def audit_url(url: str) -> dict:
                 result.setdefault("xssProbes", 0)
                 result.setdefault("pathsProbed", 0)
 
-            await page.set_viewport_size({"width": 375, "height": 812})
-            await page.wait_for_timeout(400)
-            result["responsive"] = await page.evaluate(
-                "() => document.documentElement.scrollWidth <= window.innerWidth + 5"
-            )
+            result["consoleErrors"] = len(console_errors)
             return result
         except Exception as exc:  # noqa: BLE001
             result["error"] = f"Timeout / gagal diakses: {str(exc)[:120]}"

@@ -260,6 +260,16 @@ export function normalizeAudit(
     pathsProbed: toIntOrNull(pick(record, ["pathsProbed", "paths_probed", "probedPaths"])),
     pathsGuarded: toIntOrNull(pick(record, ["pathsGuarded", "paths_guarded", "guardedPaths"])),
     pathsOpen: normalizeStringList(pick(record, ["pathsOpen", "paths_open", "openPaths"])),
+    clientAuthProtected: toBooleanOrNull(
+      pick(record, ["clientAuthProtected", "client_auth_protected"]),
+    ),
+    searchWorks: toBooleanOrNull(pick(record, ["searchWorks", "search_works"])),
+    negativeQtyRejected: toBooleanOrNull(
+      pick(record, ["negativeQtyRejected", "negative_qty_rejected"]),
+    ),
+    stockGuardDetected: toBooleanOrNull(
+      pick(record, ["stockGuardDetected", "stock_guard_detected"]),
+    ),
     locked: toBooleanOrNull(pick(record, ["locked", "isLocked", "requiresLogin"])),
     platformError: toBooleanOrNull(
       pick(record, ["platformError", "platform_error", "deploymentError"]),
@@ -328,6 +338,10 @@ export function createFailedAudit(
     pathsProbed: null,
     pathsGuarded: null,
     pathsOpen: null,
+    clientAuthProtected: null,
+    searchWorks: null,
+    negativeQtyRejected: null,
+    stockGuardDetected: null,
     locked: null,
     platformError: null,
     error: message,

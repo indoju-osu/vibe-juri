@@ -1,6 +1,7 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
+  darkMode: "class",
   content: [
     "./app/**/*.{ts,tsx}",
     "./components/**/*.{ts,tsx}",
@@ -8,6 +9,21 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      colors: {
+        slate: {
+          50: "rgb(var(--c-slate-50) / <alpha-value>)",
+          100: "rgb(var(--c-slate-100) / <alpha-value>)",
+          200: "rgb(var(--c-slate-200) / <alpha-value>)",
+          300: "rgb(var(--c-slate-300) / <alpha-value>)",
+          400: "rgb(var(--c-slate-400) / <alpha-value>)",
+          500: "rgb(var(--c-slate-500) / <alpha-value>)",
+          600: "rgb(var(--c-slate-600) / <alpha-value>)",
+          700: "rgb(var(--c-slate-700) / <alpha-value>)",
+          800: "rgb(var(--c-slate-800) / <alpha-value>)",
+          900: "rgb(var(--c-slate-900) / <alpha-value>)",
+          950: "rgb(var(--c-slate-950) / <alpha-value>)",
+        },
+      },
       fontFamily: {
         sans: [
           "Inter Variable",
@@ -28,7 +44,7 @@ const config: Config = {
         ],
       },
       boxShadow: {
-        panel: "0 1px 0 0 rgba(248,250,252,0.04) inset, 0 18px 40px -24px rgba(2,6,23,0.9)",
+        panel: "var(--shadow-panel)",
         glow: "0 0 0 1px rgba(225,29,72,0.35), 0 10px 30px -12px rgba(225,29,72,0.55)",
       },
       keyframes: {

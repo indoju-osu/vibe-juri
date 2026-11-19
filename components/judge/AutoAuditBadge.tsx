@@ -440,7 +440,7 @@ export function AutoAuditBadge({
             <p className="text-[11px] font-semibold text-slate-200">Belum ada nilai sementara</p>
             <p className="mt-0.5 text-[10px] leading-relaxed text-slate-500">
               Audit otomatis berjalan sendiri saat panel juri dibuka. Klik{" "}
-              <span className="text-slate-300">Jalankan Audit</span> untuk mengulang, atau impor JSON
+              <span className="text-slate-300">Nilai Ulang</span> untuk mengulang, atau impor JSON
               hasil audit manual. Penilaian juri tetap bisa dilakukan tanpa audit.
             </p>
           </div>
@@ -458,7 +458,7 @@ export function AutoAuditBadge({
             ) : (
               <IconRefresh className="h-3.5 w-3.5" />
             )}
-            {running ? "Mengaudit…" : "Jalankan Audit"}
+            {running ? "Mengaudit…" : "Nilai Ulang"}
           </button>
           <button
             type="button"
