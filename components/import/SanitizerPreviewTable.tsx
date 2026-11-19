@@ -41,7 +41,7 @@ export function SanitizerPreviewTable({
   const invalidCount = ignoredCount - duplicateCount;
 
   return (
-    <section className="card overflow-hidden" aria-labelledby="preview-title">
+    <section className="card flex h-full flex-col overflow-hidden" aria-labelledby="preview-title">
       <div className="flex flex-col gap-2 border-b border-slate-700/70 px-3 py-3 sm:px-4">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
@@ -226,7 +226,7 @@ export function SanitizerPreviewTable({
         </div>
       )}
 
-      <div className="flex flex-col gap-2 border-t border-slate-700/70 bg-slate-900/40 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
+      <div className="mt-auto flex flex-col gap-2 border-t border-slate-700/70 bg-slate-900/40 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
         <div className="min-w-0">
           {sessionActive ? (
             <p className="text-[11px] text-amber-300/90">

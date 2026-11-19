@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  IconArrowRight,
   IconCheck,
   IconExternal,
   IconPlus,
@@ -41,6 +42,13 @@ const DEFAULT_CONFIG: WinnersConfig = {
   overrides: {},
   customCategories: [],
 };
+
+type StepKind =
+  | { type: "idle" }
+  | { type: "zoom"; rank: number }
+  | { type: "place"; rank: number }
+  | { type: "suspense" }
+  | { type: "done" };
 
 function hostOf(url: string): string {
   try {
@@ -118,6 +126,14 @@ function PlaySvg({ className = "h-4 w-4" }: { className?: string }) {
   );
 }
 
+function StopSvg({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+      <rect x="6" y="6" width="12" height="12" rx="2" />
+    </svg>
+  );
+}
+
 function SparkBurstSvg({ className = "h-4 w-4" }: { className?: string }) {
   return (
     <svg
@@ -169,6 +185,19 @@ interface ConfettiParticle {
 
 const CONFETTI_COLORS = ["#facc15", "#f43f5e", "#38bdf8", "#34d399", "#c084fc", "#fb923c"];
 
+function buildSteps(topCount: 3 | 5): StepKind[] {
+  const steps: StepKind[] = [{ type: "idle" }];
+  for (let r = topCount; r >= 2; r -= 1) {
+    steps.push({ type: "zoom", rank: r });
+    steps.push({ type: "place", rank: r });
+  }
+  steps.push({ type: "suspense" });
+  steps.push({ type: "zoom", rank: 1 });
+  steps.push({ type: "place", rank: 1 });
+  steps.push({ type: "done" });
+  return steps;
+}
+
 export function WinnersPodiumModal({
   open,
   entries,
@@ -181,15 +210,22 @@ export function WinnersPodiumModal({
   const [config, setConfig] = useState<WinnersConfig>(DEFAULT_CONFIG);
   const [editing, setEditing] = useState(false);
   const [soundOn, setSoundOn] = useState(true);
-  const [revealedUpTo, setRevealedUpTo] = useState<number>(5);
-  const [announcing, setAnnouncing] = useState(false);
-  const [statusBanner, setStatusBanner] = useState<string | null>(null);
+  const [stepIndex, setStepIndex] = useState(0);
+  const [autoRunning, setAutoRunning] = useState(false);
+  const [elapsedSec, setElapsedSec] = useState(0);
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const timersRef = useRef<number[]>([]);
+  const intervalRef = useRef<number | null>(null);
+  const bgmRef = useRef<HTMLAudioElement | null>(null);
+  const fanfareRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     setConfig(loadConfig());
   }, []);
+
+  const steps = useMemo(() => buildSteps(config.topCount), [config.topCount]);
+  const currentStep = steps[stepIndex] ?? { type: "idle" };
 
   const updateConfig = useCallback((updater: (prev: WinnersConfig) => WinnersConfig) => {
     setConfig((prev) => {
@@ -208,7 +244,65 @@ export function WinnersPodiumModal({
       window.clearTimeout(id);
     }
     timersRef.current = [];
+    if (intervalRef.current !== null) {
+      window.clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
   }, []);
+
+  const stopAllAudio = useCallback(() => {
+    if (bgmRef.current) {
+      bgmRef.current.pause();
+      bgmRef.current.currentTime = 0;
+    }
+    if (fanfareRef.current) {
+      fanfareRef.current.pause();
+      fanfareRef.current.currentTime = 0;
+    }
+  }, []);
+
+  const startBgm = useCallback(
+    (loop: boolean) => {
+      if (!soundOn) return;
+      try {
+        if (!bgmRef.current) {
+          bgmRef.current = new Audio("/audio/ceremony-bgm.mp3");
+        }
+        bgmRef.current.loop = loop;
+        bgmRef.current.volume = 0.72;
+        bgmRef.current.currentTime = 0;
+        void bgmRef.current.play().catch(() => {});
+      } catch {
+        /* ignore */
+      }
+    },
+    [soundOn],
+  );
+
+  const playChampionAudio = useCallback(() => {
+    if (!soundOn) return;
+    try {
+      if (bgmRef.current) {
+        bgmRef.current.volume = 0.25;
+      }
+      if (!fanfareRef.current) {
+        fanfareRef.current = new Audio("/audio/champion-fanfare.mp3");
+      }
+      fanfareRef.current.volume = 0.95;
+      fanfareRef.current.currentTime = 0;
+      void fanfareRef.current.play().catch(() => {
+        playChampionFanfare(true);
+      });
+    } catch {
+      playChampionFanfare(true);
+    }
+  }, [soundOn]);
+
+  useEffect(() => {
+    if (!soundOn) {
+      stopAllAudio();
+    }
+  }, [soundOn, stopAllAudio]);
 
   const launchConfetti = useCallback(() => {
     const canvas = canvasRef.current;
@@ -219,18 +313,18 @@ export function WinnersPodiumModal({
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    const particles: ConfettiParticle[] = Array.from({ length: 150 }, (_, i) => {
+    const particles: ConfettiParticle[] = Array.from({ length: 170 }, (_, i) => {
       const fromLeft = i % 2 === 0;
       return {
         x: fromLeft ? canvas.width * 0.16 : canvas.width * 0.84,
-        y: canvas.height * 0.4,
-        vx: (fromLeft ? 1 : -1) * (2 + Math.random() * 8) + (Math.random() - 0.5) * 4,
-        vy: -7 - Math.random() * 9,
+        y: canvas.height * 0.42,
+        vx: (fromLeft ? 1 : -1) * (2 + Math.random() * 8.5) + (Math.random() - 0.5) * 4,
+        vy: -7.5 - Math.random() * 9.5,
         size: 6 + Math.random() * 7,
         color: CONFETTI_COLORS[i % CONFETTI_COLORS.length]!,
         rot: Math.random() * Math.PI * 2,
         vRot: (Math.random() - 0.5) * 0.25,
-        life: 160 + Math.random() * 70,
+        life: 170 + Math.random() * 80,
       };
     });
 
@@ -244,7 +338,7 @@ export function WinnersPodiumModal({
         alive = true;
         p.x += p.vx;
         p.y += p.vy;
-        p.vy += 0.26;
+        p.vy += 0.25;
         p.vx *= 0.99;
         p.rot += p.vRot;
         p.life -= 1;
@@ -257,7 +351,7 @@ export function WinnersPodiumModal({
         ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
         ctx.restore();
       }
-      if (alive && frame < 240) {
+      if (alive && frame < 250) {
         requestAnimationFrame(tick);
       } else {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -266,17 +360,28 @@ export function WinnersPodiumModal({
     requestAnimationFrame(tick);
   }, []);
 
+  // Reset selalu ke Tahap 1 (kosong) saat modal dibuka
   useEffect(() => {
     if (!open) {
       clearTimers();
-      setAnnouncing(false);
-      setStatusBanner(null);
+      stopAllAudio();
+      setAutoRunning(false);
+      setStepIndex(0);
+      setElapsedSec(0);
       return;
     }
-    setRevealedUpTo(config.topCount);
-  }, [open, config.topCount, clearTimers]);
+    setStepIndex(0);
+    setAutoRunning(false);
+    setElapsedSec(0);
+  }, [open, clearTimers, stopAllAudio]);
 
-  useEffect(() => () => clearTimers(), [clearTimers]);
+  useEffect(
+    () => () => {
+      clearTimers();
+      stopAllAudio();
+    },
+    [clearTimers, stopAllAudio],
+  );
 
   const winners = useMemo(() => {
     const list: { rank: number; entry: JudgeEntry; score: number }[] = [];
@@ -296,56 +401,159 @@ export function WinnersPodiumModal({
     return list;
   }, [config.overrides, config.topCount, entries]);
 
-  const startKahootCeremony = () => {
+  // Menentukan peringkat mana saja yang sudah menetap di podium/daftar
+  const placedRanks = useMemo(() => {
+    const set = new Set<number>();
+    for (let i = 0; i <= stepIndex; i += 1) {
+      const s = steps[i];
+      if (s?.type === "place") set.add(s.rank);
+      if (s?.type === "done") {
+        for (let r = 1; r <= config.topCount; r += 1) set.add(r);
+      }
+    }
+    return set;
+  }, [config.topCount, stepIndex, steps]);
+
+  const applyStepEffects = useCallback(
+    (step: StepKind) => {
+      if (step.type === "zoom") {
+        if (step.rank === 1) {
+          playChampionAudio();
+          launchConfetti();
+        } else if (step.rank === 2 || step.rank === 3) {
+          playRevealChime(step.rank, soundOn);
+        } else {
+          playSpotlightClick(soundOn);
+        }
+      } else if (step.type === "suspense") {
+        playDrumroll(2400, soundOn);
+      } else if (step.type === "place" && step.rank === 1) {
+        updateConfig((prev) => ({ ...prev, highlightRank: 1 }));
+        launchConfetti();
+      } else if (step.type === "done") {
+        if (bgmRef.current) {
+          bgmRef.current.pause();
+          bgmRef.current.currentTime = 0;
+        }
+      }
+    },
+    [launchConfetti, playChampionAudio, soundOn, updateConfig],
+  );
+
+  const goNextStep = useCallback(() => {
     clearTimers();
+    setAutoRunning(false);
+    setStepIndex((prev) => {
+      const nextIdx = Math.min(steps.length - 1, prev + 1);
+      if (prev === 0) {
+        startBgm(true);
+      }
+      const nextStep = steps[nextIdx];
+      if (nextStep) applyStepEffects(nextStep);
+      return nextIdx;
+    });
+  }, [applyStepEffects, clearTimers, startBgm, steps]);
+
+  const stopCeremony = useCallback(() => {
+    clearTimers();
+    stopAllAudio();
+    setAutoRunning(false);
+    setElapsedSec(0);
+    setStepIndex(0);
+  }, [clearTimers, stopAllAudio]);
+
+  // Auto Run pas 30 detik
+  const startAutoRun30s = useCallback(() => {
+    clearTimers();
+    stopAllAudio();
     setEditing(false);
-    setAnnouncing(true);
-    setRevealedUpTo(0);
-    setStatusBanner("Menyiapkan panggung juara…");
-    playDrumroll(1100, soundOn);
+    setAutoRunning(true);
+    setStepIndex(0);
+    setElapsedSec(0);
+    startBgm(false);
 
-    const t1 = window.setTimeout(() => {
-      setRevealedUpTo(3);
-      setStatusBanner("Juara 3!");
-      playRevealChime(3, soundOn);
-    }, 1100);
+    const startedAt = Date.now();
+    intervalRef.current = window.setInterval(() => {
+      const sec = Math.min(30, Math.floor((Date.now() - startedAt) / 1000));
+      setElapsedSec(sec);
+    }, 250);
 
-    const t2 = window.setTimeout(() => {
-      setRevealedUpTo(2);
-      setStatusBanner("Juara 2!");
-      playRevealChime(2, soundOn);
-    }, 2500);
+    // Jadwal 30 detik sesuai jumlah step (index 1 .. steps.length-1)
+    const scheduleMs: number[] =
+      config.topCount === 5
+        ? [
+            500, // zoom 5
+            3000, // place 5
+            5000, // zoom 4
+            7500, // place 4
+            9500, // zoom 3
+            12300, // place 3
+            14500, // zoom 2
+            17300, // place 2
+            19500, // suspense jeda mendebarkan + lampu sorot (4.5s)
+            24000, // zoom 1 + fanfare + konfeti
+            27500, // place 1
+            30000, // done
+          ]
+        : [
+            600, // zoom 3
+            4200, // place 3
+            7800, // zoom 2
+            11400, // place 2
+            15000, // suspense jeda mendebarkan (5.5s)
+            20500, // zoom 1 + fanfare + konfeti
+            26000, // place 1
+            30000, // done
+          ];
 
-    const t3 = window.setTimeout(() => {
-      setStatusBanner("Menuju Juara 1…");
-      playDrumroll(1500, soundOn);
-    }, 3900);
-
-    const t4 = window.setTimeout(() => {
-      setRevealedUpTo(config.topCount);
-      updateConfig((prev) => ({ ...prev, highlightRank: 1 }));
-      setStatusBanner("Selamat kepada Juara 1!");
-      setAnnouncing(false);
-      playChampionFanfare(soundOn);
-      launchConfetti();
-    }, 5500);
-
-    timersRef.current.push(t1, t2, t3, t4);
-  };
+    scheduleMs.forEach((ms, offset) => {
+      const targetIdx = offset + 1;
+      if (targetIdx >= steps.length) return;
+      const tid = window.setTimeout(() => {
+        setStepIndex(targetIdx);
+        const s = steps[targetIdx];
+        if (s) applyStepEffects(s);
+        if (targetIdx === steps.length - 1) {
+          setAutoRunning(false);
+          clearTimers();
+          setElapsedSec(30);
+        }
+      }, ms);
+      timersRef.current.push(tid);
+    });
+  }, [applyStepEffects, clearTimers, config.topCount, startBgm, steps, stopAllAudio]);
 
   if (!open) return null;
 
   const podiumOrder = [2, 1, 3] as const;
   const topFourFive = winners.filter((w) => w.rank >= 4);
-  const highlightedWinner = winners.find((w) => w.rank === config.highlightRank) ?? winners[0];
+  const highlightedWinner =
+    placedRanks.has(config.highlightRank)
+      ? winners.find((w) => w.rank === config.highlightRank)
+      : undefined;
 
-  const isRankVisible = (rank: number) => {
-    if (!announcing && revealedUpTo >= config.topCount) return true;
-    if (rank === 3) return revealedUpTo >= 3 || revealedUpTo === 1 || revealedUpTo >= 5;
-    if (rank === 2) return revealedUpTo >= 2 && revealedUpTo !== 3;
-    if (rank === 1) return revealedUpTo >= 1 && revealedUpTo !== 2 && revealedUpTo !== 3;
-    return revealedUpTo >= rank;
-  };
+  const zoomedWinner =
+    currentStep.type === "zoom"
+      ? winners.find((w) => w.rank === currentStep.rank)
+      : undefined;
+
+  const isSuspense = currentStep.type === "suspense";
+  const isIdle = currentStep.type === "idle";
+  const isDone = currentStep.type === "done";
+
+  const statusText = isIdle
+    ? "Tahap 1: Panggung siap — klik Mulai (Auto 30 dtk) atau Next untuk memulai"
+    : isSuspense
+      ? "Jeda Mendebarkan… Siapakah Juara 1?"
+      : zoomedWinner
+        ? zoomedWinner.rank === 1
+          ? "Selamat kepada Juara 1!"
+          : `Mengumumkan Juara ${zoomedWinner.rank}!`
+        : currentStep.type === "place"
+          ? currentStep.rank === 1
+            ? "Juara 1 menempati Podium Utama!"
+            : `Juara ${currentStep.rank} menempati posisi #${currentStep.rank}`
+          : "Pengumuman Juara Selesai!";
 
   return (
     <div
@@ -374,6 +582,39 @@ export function WinnersPodiumModal({
         }}
       />
 
+      {/* Animasi Lampu Sorot saat Jeda Mendebarkan & Juara 1 */}
+      {(isSuspense || (zoomedWinner && zoomedWinner.rank === 1) || placedRanks.has(1)) ? (
+        <div aria-hidden="true" className="pointer-events-none fixed inset-0 overflow-hidden">
+          <div
+            className={`absolute -top-24 left-1/2 h-[120vh] w-[42vw] -translate-x-1/2 blur-2xl transition-opacity duration-500 ${
+              isSuspense ? "animate-pulse opacity-65" : "opacity-45"
+            }`}
+            style={{
+              background:
+                "conic-gradient(from 165deg at 50% 0%, transparent 0deg, rgba(253, 224, 71, 0.45) 15deg, rgba(255, 255, 255, 0.35) 22deg, transparent 36deg)",
+            }}
+          />
+          {isSuspense ? (
+            <>
+              <div
+                className="absolute -top-20 left-[20%] h-[115vh] w-[30vw] -rotate-12 blur-2xl animate-pulse"
+                style={{
+                  background:
+                    "conic-gradient(from 165deg at 50% 0%, transparent 0deg, rgba(56, 189, 248, 0.38) 18deg, transparent 35deg)",
+                }}
+              />
+              <div
+                className="absolute -top-20 right-[20%] h-[115vh] w-[30vw] rotate-12 blur-2xl animate-pulse"
+                style={{
+                  background:
+                    "conic-gradient(from 165deg at 50% 0%, transparent 0deg, rgba(244, 63, 94, 0.38) 18deg, transparent 35deg)",
+                }}
+              />
+            </>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-[1160px] flex-col px-4 py-5 sm:px-6">
         {/* Header Bar */}
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
@@ -385,7 +626,9 @@ export function WinnersPodiumModal({
               <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-[#c4b5fd]">
                 Panggung Pemenang · Top {config.topCount}
               </p>
-              <p className="text-xs font-bold text-white/90">Vibe-Juri Awards Stage</p>
+              <p className="text-xs font-bold text-white/90">
+                {autoRunning ? `Auto Run · ${elapsedSec} / 30 dtk` : "Vibe-Juri Awards Stage"}
+              </p>
             </div>
           </div>
 
@@ -398,20 +641,44 @@ export function WinnersPodiumModal({
               <VolumeSvg muted={!soundOn} className="h-4 w-4 text-[#ddd6fe]" />
               <span>{soundOn ? "Suara Aktif" : "Senyap"}</span>
             </button>
+
             <button
               type="button"
-              onClick={startKahootCeremony}
+              onClick={startAutoRun30s}
               disabled={winners.length === 0}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#fbbf24] px-4 text-xs font-extrabold text-[#1e1b4b] shadow-[0_6px_24px_rgba(251,191,36,0.38)] transition hover:bg-[#fcd34d] disabled:opacity-50"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#fbbf24] px-3.5 text-xs font-extrabold text-[#1e1b4b] shadow-[0_6px_24px_rgba(251,191,36,0.38)] transition hover:bg-[#fcd34d] disabled:opacity-50"
             >
               <PlaySvg className="h-3.5 w-3.5" />
-              <span>{announcing ? "Mengumumkan…" : "Mulai Pengumuman"}</span>
+              <span>{autoRunning ? `Auto (${elapsedSec}s/30s)` : "Auto Run 30 dtk"}</span>
             </button>
+
+            {!isDone ? (
+              <button
+                type="button"
+                onClick={goNextStep}
+                disabled={winners.length === 0}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#38bdf8]/60 bg-[#0ea5e9] px-3.5 text-xs font-extrabold text-white shadow-md transition hover:bg-[#38bdf8] disabled:opacity-50"
+              >
+                <span>{isIdle ? "Mulai (Next)" : "Next"}</span>
+                <IconArrowRight className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
+
+            <button
+              type="button"
+              onClick={stopCeremony}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-white/15 bg-white/[0.08] px-3 text-xs font-semibold text-white transition hover:bg-white/[0.16]"
+              title="Stop musik & kosongkan panggung ke Tahap 1"
+            >
+              <StopSvg className="h-3.5 w-3.5 text-rose-300" />
+              <span>Stop / Reset</span>
+            </button>
+
             <button
               type="button"
               onClick={() => {
                 launchConfetti();
-                playChampionFanfare(soundOn);
+                playChampionAudio();
               }}
               className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-white/15 bg-white/[0.08] px-3 text-xs font-semibold text-white transition hover:bg-white/[0.16]"
               title="Putar ulang konfeti dan fanfare"
@@ -419,6 +686,7 @@ export function WinnersPodiumModal({
               <SparkBurstSvg className="h-4 w-4 text-[#fcd34d]" />
               <span>Konfeti</span>
             </button>
+
             <button
               type="button"
               onClick={() => setEditing((prev) => !prev)}
@@ -431,9 +699,13 @@ export function WinnersPodiumModal({
               <SlidersSvg className="h-4 w-4" />
               <span>{editing ? "Tutup Edit" : "Edit Juara"}</span>
             </button>
+
             <button
               type="button"
-              onClick={onClose}
+              onClick={() => {
+                stopCeremony();
+                onClose();
+              }}
               className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-white/15 bg-white/[0.08] px-3 text-xs font-semibold text-white transition hover:border-rose-400/60 hover:bg-rose-500/80"
             >
               <IconX className="h-4 w-4" />
@@ -449,16 +721,14 @@ export function WinnersPodiumModal({
             <h2 className="text-lg font-black tracking-tight sm:text-2xl">{config.title}</h2>
           </div>
 
-          {statusBanner ? (
-            <span className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-[#fbbf24]/50 bg-[#fbbf24]/20 px-4 py-1 text-xs font-bold tracking-wide text-[#fde68a]">
-              <SparkBurstSvg className="h-3.5 w-3.5 text-[#fbbf24]" />
-              {statusBanner}
-            </span>
-          ) : null}
+          <span className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-[#fbbf24]/45 bg-[#fbbf24]/15 px-4 py-1 text-xs font-bold tracking-wide text-[#fde68a]">
+            <SparkBurstSvg className="h-3.5 w-3.5 text-[#fbbf24]" />
+            {statusText}
+          </span>
         </div>
 
-        {/* Kartu Sorotan Utama */}
-        {highlightedWinner && isRankVisible(highlightedWinner.rank) ? (
+        {/* Kartu Sorotan Utama (hanya tampil setelah juara yang disorot sudah diumumkan) */}
+        {highlightedWinner ? (
           <div className="mx-auto mt-4 w-full max-w-xl rounded-2xl border border-[#fbbf24]/45 bg-white/[0.08] px-5 py-3.5 text-center shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-md">
             <div className="inline-flex items-center gap-1.5 rounded-full border border-[#fbbf24]/40 bg-[#fbbf24]/15 px-3 py-0.5 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-[#fde047]">
               <CrownSvg className="h-3.5 w-3.5 text-[#fbbf24]" />
@@ -481,117 +751,177 @@ export function WinnersPodiumModal({
           </div>
         ) : null}
 
-        {/* Podium 2 - 1 - 3 (Pilar Gelap + Medali Bulat Emas/Perak/Perunggu) */}
-        <div className="mt-8 grid flex-1 grid-cols-1 items-end gap-4 sm:grid-cols-3 sm:gap-5">
-          {podiumOrder.map((rank) => {
-            const item = winners.find((w) => w.rank === rank);
-            if (!item) return <div key={rank} className="hidden sm:block" />;
-            const visible = isRankVisible(rank);
-            const highlighted = config.highlightRank === rank;
-            const heightClass =
-              rank === 1 ? "min-h-[225px]" : rank === 2 ? "min-h-[175px]" : "min-h-[142px]";
-            const badgeStyle =
-              rank === 1
-                ? "bg-gradient-to-b from-[#fde047] to-[#eab308] text-[#1e1b4b] ring-4 ring-[#fef08a]/40 shadow-[0_0_28px_rgba(250,204,21,0.55)]"
-                : rank === 2
-                  ? "bg-gradient-to-b from-[#f8fafc] to-[#cbd5e1] text-[#0f172a] ring-4 ring-white/30"
-                  : "bg-gradient-to-b from-[#fdba74] to-[#ea580c] text-[#1e1b4b] ring-4 ring-[#fed7aa]/30";
-            const pillarBorder =
-              rank === 1
-                ? "border-t-[#fde047] bg-gradient-to-b from-[#2e1a70] to-[#190b44]"
-                : rank === 2
-                  ? "border-t-[#e2e8f0] bg-gradient-to-b from-[#26165e] to-[#160a3c]"
-                  : "border-t-[#fb923c] bg-gradient-to-b from-[#26165e] to-[#160a3c]";
+        {/* Overlay Zoom Pemenang / Jeda Mendebarkan */}
+        {zoomedWinner ? (
+          <div className="my-6 flex flex-1 items-center justify-center">
+            <div
+              className={`w-full max-w-lg animate-fade-up rounded-3xl border-2 px-6 py-8 text-center shadow-[0_0_80px_rgba(250,204,21,0.45)] backdrop-blur-md ${
+                zoomedWinner.rank === 1
+                  ? "scale-105 border-[#fde047] bg-gradient-to-b from-[#3b1c8c]/95 to-[#1b084f]/95"
+                  : "border-white/30 bg-[#251263]/95"
+              }`}
+            >
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#fbbf24] text-2xl font-black text-[#1e1b4b] shadow-lg">
+                {zoomedWinner.rank === 1 ? (
+                  <CrownSvg className="h-8 w-8" />
+                ) : (
+                  zoomedWinner.rank
+                )}
+              </div>
+              <p className="mt-4 font-mono text-xs font-bold uppercase tracking-[0.25em] text-[#fde047]">
+                {zoomedWinner.rank === 1
+                  ? "Champion · Juara 1"
+                  : `Juara ${zoomedWinner.rank}`}
+              </p>
+              <h3 className="mt-2 break-words text-3xl font-black tracking-tight text-white sm:text-4xl">
+                {hostOf(zoomedWinner.entry.url)}
+              </h3>
+              <p className="mt-1 truncate font-mono text-xs text-[#ddd6fe]">
+                {zoomedWinner.entry.url}
+              </p>
+              <div className="mt-4 inline-flex items-center rounded-full bg-[#fbbf24] px-5 py-1.5 font-mono text-base font-black text-[#1e1b4b]">
+                Skor Akhir: {zoomedWinner.score} / 100
+              </div>
+            </div>
+          </div>
+        ) : isSuspense ? (
+          <div className="my-6 flex flex-1 items-center justify-center">
+            <div className="w-full max-w-md rounded-3xl border border-[#fde047]/60 bg-[#24105e]/90 px-6 py-10 text-center shadow-[0_0_90px_rgba(250,204,21,0.4)]">
+              <div className="mx-auto flex h-20 w-20 animate-bounce items-center justify-center rounded-full border-4 border-[#fde047] bg-[#fbbf24]/20 text-[#fde047]">
+                <CrownSvg className="h-10 w-10" />
+              </div>
+              <p className="mt-4 font-mono text-xs font-bold uppercase tracking-[0.25em] text-[#fde68a]">
+                Momen Puncak
+              </p>
+              <h3 className="mt-2 text-3xl font-black tracking-tight text-white">
+                Siapakah Juara 1?
+              </h3>
+              <p className="mt-2 text-xs text-[#ddd6fe]">
+                Lampu sorot mengarah ke Podium Utama…
+              </p>
+            </div>
+          </div>
+        ) : (
+          /* Podium 2 - 1 - 3 */
+          <div className="mt-8 grid flex-1 grid-cols-1 items-end gap-4 sm:grid-cols-3 sm:gap-5">
+            {podiumOrder.map((rank) => {
+              const item = winners.find((w) => w.rank === rank);
+              if (!item) return <div key={rank} className="hidden sm:block" />;
+              const visible = placedRanks.has(rank);
+              const highlighted = config.highlightRank === rank && visible;
+              const heightClass =
+                rank === 1 ? "min-h-[225px]" : rank === 2 ? "min-h-[175px]" : "min-h-[142px]";
+              const badgeStyle =
+                rank === 1
+                  ? "bg-gradient-to-b from-[#fde047] to-[#eab308] text-[#1e1b4b] ring-4 ring-[#fef08a]/40 shadow-[0_0_28px_rgba(250,204,21,0.55)]"
+                  : rank === 2
+                    ? "bg-gradient-to-b from-[#f8fafc] to-[#cbd5e1] text-[#0f172a] ring-4 ring-white/30"
+                    : "bg-gradient-to-b from-[#fdba74] to-[#ea580c] text-[#1e1b4b] ring-4 ring-[#fed7aa]/30";
+              const pillarBorder =
+                rank === 1
+                  ? "border-t-[#fde047] bg-gradient-to-b from-[#2e1a70] to-[#190b44]"
+                  : rank === 2
+                    ? "border-t-[#e2e8f0] bg-gradient-to-b from-[#26165e] to-[#160a3c]"
+                    : "border-t-[#fb923c] bg-gradient-to-b from-[#26165e] to-[#160a3c]";
 
-            return (
-              <button
-                key={rank}
-                type="button"
-                onClick={() => {
-                  updateConfig((prev) => ({ ...prev, highlightRank: rank }));
-                  playSpotlightClick(soundOn);
-                }}
-                className={`group flex flex-col items-center text-center transition-all duration-500 ${
-                  visible ? "translate-y-0 opacity-100" : "translate-y-12 opacity-0"
-                }`}
-              >
-                {/* Nama pemenang melayang di atas pilar */}
-                <div className="mb-3 w-full px-2">
-                  <div className="inline-flex items-center gap-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-[#ddd6fe]">
-                    {rank === 1 ? (
-                      <CrownSvg className="h-4 w-4 text-[#fbbf24]" />
-                    ) : (
-                      <MedalSvg
-                        className="h-4 w-4"
-                        color={rank === 2 ? "#e2e8f0" : "#fb923c"}
-                      />
-                    )}
-                    <span>Juara {rank}</span>
-                  </div>
-                  <p
-                    className={`mt-1 truncate text-lg font-black tracking-tight sm:text-xl ${
-                      highlighted ? "text-[#fde047]" : "text-white"
+              return (
+                <button
+                  key={rank}
+                  type="button"
+                  onClick={() => {
+                    if (!visible) return;
+                    updateConfig((prev) => ({ ...prev, highlightRank: rank }));
+                    playSpotlightClick(soundOn);
+                  }}
+                  className="group flex flex-col items-center text-center transition-all duration-500"
+                >
+                  {/* Nama pemenang (tersembunyi sebelum diumumkan) */}
+                  <div
+                    className={`mb-3 w-full px-2 transition-all duration-500 ${
+                      visible ? "translate-y-0 opacity-100" : "translate-y-4 opacity-30"
                     }`}
                   >
-                    {hostOf(item.entry.url)}
-                  </p>
-                </div>
-
-                {/* Pilar podium gelap elegan ala Kahoot */}
-                <div
-                  className={`flex w-full flex-col items-center justify-start rounded-t-2xl border-x border-t-4 border-white/10 px-4 pt-5 pb-4 shadow-[0_-8px_40px_rgba(0,0,0,0.45)] transition ${heightClass} ${pillarBorder} ${
-                    highlighted
-                      ? "ring-2 ring-[#fde047]/70 shadow-[0_0_45px_rgba(250,204,21,0.28)]"
-                      : "opacity-95 hover:opacity-100"
-                  }`}
-                >
-                  <div
-                    className={`flex h-14 w-14 items-center justify-center rounded-full text-2xl font-black ${badgeStyle}`}
-                  >
-                    {rank}
+                    <div className="inline-flex items-center gap-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-[#ddd6fe]">
+                      {rank === 1 ? (
+                        <CrownSvg className="h-4 w-4 text-[#fbbf24]" />
+                      ) : (
+                        <MedalSvg
+                          className="h-4 w-4"
+                          color={rank === 2 ? "#e2e8f0" : "#fb923c"}
+                        />
+                      )}
+                      <span>Juara {rank}</span>
+                    </div>
+                    <p
+                      className={`mt-1 truncate text-lg font-black tracking-tight sm:text-xl ${
+                        highlighted ? "text-[#fde047]" : "text-white"
+                      }`}
+                    >
+                      {visible ? hostOf(item.entry.url) : "???"}
+                    </p>
                   </div>
-                  <p className="mt-3 font-mono text-xl font-black text-white">
-                    {item.score}
-                    <span className="ml-1 text-xs font-semibold text-[#c4b5fd]">/ 100</span>
-                  </p>
-                  <span className="mt-1 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-[#c4b5fd]">
-                    {rank === 1 ? "Champion" : rank === 2 ? "Runner-up" : "3rd Place"}
-                  </span>
-                </div>
-              </button>
-            );
-          })}
-        </div>
+
+                  {/* Pilar podium gelap */}
+                  <div
+                    className={`flex w-full flex-col items-center justify-start rounded-t-2xl border-x border-t-4 border-white/10 px-4 pt-5 pb-4 shadow-[0_-8px_40px_rgba(0,0,0,0.45)] transition-all duration-500 ${heightClass} ${pillarBorder} ${
+                      highlighted
+                        ? "ring-2 ring-[#fde047]/70 shadow-[0_0_45px_rgba(250,204,21,0.28)]"
+                        : ""
+                    }`}
+                  >
+                    <div
+                      className={`flex h-14 w-14 items-center justify-center rounded-full text-2xl font-black ${badgeStyle}`}
+                    >
+                      {rank}
+                    </div>
+                    <p className="mt-3 font-mono text-xl font-black text-white">
+                      {visible ? item.score : "—"}
+                      <span className="ml-1 text-xs font-semibold text-[#c4b5fd]">/ 100</span>
+                    </p>
+                    <span className="mt-1 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-[#c4b5fd]">
+                      {rank === 1 ? "Champion" : rank === 2 ? "Runner-up" : "3rd Place"}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* Peringkat 4 & 5 */}
         {config.topCount === 5 && topFourFive.length > 0 ? (
           <div className="mt-6 grid gap-3 sm:grid-cols-2">
-            {topFourFive.map((item) => (
-              <div
-                key={item.rank}
-                className="flex items-center justify-between gap-3 rounded-xl border border-white/15 bg-white/[0.07] px-4 py-3 backdrop-blur-sm"
-              >
-                <div className="flex min-w-0 items-center gap-3">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/20 bg-white/10 font-mono text-sm font-black text-[#fde047]">
-                    #{item.rank}
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-bold text-white">{hostOf(item.entry.url)}</p>
-                    <p className="truncate font-mono text-[10px] text-[#ddd6fe]">
-                      {item.entry.url}
-                    </p>
+            {topFourFive.map((item) => {
+              const visible = placedRanks.has(item.rank);
+              return (
+                <div
+                  key={item.rank}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-white/15 bg-white/[0.07] px-4 py-3 backdrop-blur-sm transition-all duration-500"
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/20 bg-white/10 font-mono text-sm font-black text-[#fde047]">
+                      #{item.rank}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-bold text-white">
+                        {visible ? hostOf(item.entry.url) : "Menunggu pengumuman…"}
+                      </p>
+                      <p className="truncate font-mono text-[10px] text-[#ddd6fe]">
+                        {visible ? item.entry.url : "???"}
+                      </p>
+                    </div>
                   </div>
+                  <span className="shrink-0 rounded-lg border border-[#fbbf24]/35 bg-[#fbbf24]/15 px-2.5 py-1 font-mono text-xs font-extrabold text-[#fde68a]">
+                    {visible ? item.score : "—"}
+                  </span>
                 </div>
-                <span className="shrink-0 rounded-lg border border-[#fbbf24]/35 bg-[#fbbf24]/15 px-2.5 py-1 font-mono text-xs font-extrabold text-[#fde68a]">
-                  {item.score}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : null}
 
-        {/* Kategori Kustom */}
-        {config.customCategories.length > 0 ? (
+        {/* Kategori Kustom (tampil setelah pengumuman selesai atau saat tidak kosong) */}
+        {config.customCategories.length > 0 && isDone ? (
           <div className="mt-6">
             <p className="mb-2.5 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-[#ddd6fe]">
               Penghargaan Kategori Kustom

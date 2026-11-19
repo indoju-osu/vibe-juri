@@ -58,9 +58,12 @@ function Metric({
   hint?: string;
 }) {
   return (
-    <div className="min-w-0 rounded-md border border-slate-700/70 bg-slate-950/50 px-2 py-1.5">
+    <div
+      className={`min-w-0 rounded-md border border-slate-700/70 bg-slate-950/50 px-2 py-1.5 ${hint ? "cursor-help" : ""}`}
+      title={hint ?? value}
+    >
       <p className="label-mono text-[9px]">{label}</p>
-      <p className={`mt-0.5 truncate font-mono text-xs font-semibold ${className}`} title={hint ?? value}>
+      <p className={`mt-0.5 truncate font-mono text-xs font-semibold ${className}`}>
         {value}
       </p>
     </div>
@@ -209,12 +212,36 @@ export function AutoAuditBadge({
 
                 <dl className="mt-1.5 grid grid-cols-4 gap-1">
                   {[
-                    { label: "MVP", value: auto.mvp, max: 35 },
-                    { label: "UI/UX", value: auto.uiux, max: 30 },
-                    { label: "Fitur", value: auto.features, max: 20 },
-                    { label: "Perf", value: auto.performance, max: 15 },
+                    {
+                      label: "MVP",
+                      value: auto.mvp,
+                      max: 35,
+                      tip: "Kesiapan Produk & MVP (maks 35): foto produk asli, sinyal transaksi/harga, dan kelengkapan konten.",
+                    },
+                    {
+                      label: "UI/UX",
+                      value: auto.uiux,
+                      max: 30,
+                      tip: "Kualitas UI/UX & Estetika (maks 30): tipografi, struktur nav/footer/search, responsif mobile, dan polish kartu.",
+                    },
+                    {
+                      label: "Fitur",
+                      value: auto.features,
+                      max: 20,
+                      tip: "Fitur & Interaktivitas (maks 20): jumlah tombol/elemen interaktif dan input form/pencarian.",
+                    },
+                    {
+                      label: "Perf",
+                      value: auto.performance,
+                      max: 15,
+                      tip: "Performa & Stabilitas (maks 15): bebas error JS console dan kecepatan muat halaman.",
+                    },
                   ].map((item) => (
-                    <div key={item.label} className="rounded bg-slate-950/60 px-1 py-0.5">
+                    <div
+                      key={item.label}
+                      title={item.tip}
+                      className="cursor-help rounded bg-slate-950/60 px-1 py-0.5"
+                    >
                       <dt className="label-mono text-[8px]">{item.label}</dt>
                       <dd className="font-mono text-[11px] font-bold text-slate-100">
                         {item.value}
@@ -258,13 +285,37 @@ export function AutoAuditBadge({
 
                 <dl className="mt-1.5 grid grid-cols-5 gap-1">
                   {[
-                    { label: "XSS", value: sec.xss },
-                    { label: "Auth", value: sec.auth },
-                    { label: "Data", value: sec.data },
-                    { label: "Hdr", value: sec.headers },
-                    { label: "Logika", value: sec.logic },
+                    {
+                      label: "XSS",
+                      value: sec.xss,
+                      tip: "Sanitasi Input & XSS (maks 5): uji refleksi payload aman pada parameter URL.",
+                    },
+                    {
+                      label: "Auth",
+                      value: sec.auth,
+                      tip: "Autentikasi & Kontrol Akses Rute (maks 5): proteksi rute sensitif (/admin, /api/*) server-side maupun client-side.",
+                    },
+                    {
+                      label: "Data",
+                      value: sec.data,
+                      tip: "Proteksi Data Sensitif (maks 5): tidak ada .env/.git terekspos atau kredensial/API key bocor di bundle JS.",
+                    },
+                    {
+                      label: "Hdr",
+                      value: sec.headers,
+                      tip: "Security Headers & HTTPS (maks 5): kelengkapan CSP, X-Content-Type-Options, X-Frame-Options, HSTS, dan Referrer-Policy.",
+                    },
+                    {
+                      label: "Logika",
+                      value: sec.logic,
+                      tip: "Validasi Logika Bisnis (maks 5): uji heuristik input negatif (-1), batas stok, dan responsivitas pencarian.",
+                    },
                   ].map((item) => (
-                    <div key={item.label} className="rounded bg-slate-950/60 px-1 py-0.5">
+                    <div
+                      key={item.label}
+                      title={item.tip}
+                      className="cursor-help rounded bg-slate-950/60 px-1 py-0.5"
+                    >
                       <dt className="label-mono text-[8px]">{item.label}</dt>
                       <dd
                         className={`font-mono text-[11px] font-bold ${
@@ -298,6 +349,7 @@ export function AutoAuditBadge({
                 label="Load time"
                 value={audit.loadTimeSeconds === null ? "—" : `${audit.loadTimeSeconds} dtk`}
                 className={loadTone(audit.loadTimeSeconds)}
+                hint="Waktu muat halaman hingga selesai dirender (ideal <= 8 detik)."
               />
               <Metric
                 label="Responsif"
@@ -305,6 +357,7 @@ export function AutoAuditBadge({
                   audit.responsive === null ? "—" : audit.responsive ? "Ya" : "Tidak"
                 }
                 className={audit.responsive ? "text-emerald-300" : "text-amber-300"}
+                hint="Cek horizontal overflow pada lebar layar mobile 375px."
               />
               <Metric
                 label="Foto raster"
@@ -312,21 +365,25 @@ export function AutoAuditBadge({
                 className={
                   audit.rasterImages === 0 ? "text-rose-300" : "text-emerald-300"
                 }
+                hint="Jumlah foto produk asli (JPG/PNG/WebP/AVIF) berukuran >= 80px."
               />
               <Metric
                 label="Ilustrasi SVG"
                 value={audit.svgImages === null ? "—" : String(audit.svgImages)}
                 className={(audit.svgImages ?? 0) > 0 ? "text-amber-300" : "text-slate-200"}
+                hint="Jumlah elemen vektor <svg> atau gambar .svg pada halaman."
               />
               <Metric
                 label="Error JS"
                 value={audit.consoleErrors === null ? "—" : String(audit.consoleErrors)}
                 className={errorTone(audit.consoleErrors)}
+                hint="Jumlah uncaught JavaScript error di console browser saat halaman dibuka & diuji."
               />
               <Metric
                 label="Security headers"
                 value={`${matched.length} / 5`}
                 className={matched.length >= 3 ? "text-emerald-300" : "text-amber-300"}
+                hint="Jumlah security header standar yang terdeteksi (CSP, X-Content-Type-Options, X-Frame-Options, HSTS, Referrer-Policy)."
               />
             </div>
 

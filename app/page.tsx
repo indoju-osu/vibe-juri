@@ -260,7 +260,7 @@ export default function HomePage() {
       ) : null}
 
       <section id="import" className="mt-5 scroll-mt-20" aria-label="Import dan sanitasi URL">
-        <div className="grid items-start gap-4 lg:grid-cols-2">
+        <div className="grid items-stretch gap-4 lg:grid-cols-2">
           <UrlBatchImporter onEntries={handleEntries} />
           <SanitizerPreviewTable
             result={preview}

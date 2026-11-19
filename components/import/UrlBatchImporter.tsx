@@ -114,7 +114,7 @@ export function UrlBatchImporter({ onEntries }: UrlBatchImporterProps) {
   };
 
   return (
-    <section className="card overflow-hidden" aria-labelledby="importer-title">
+    <section className="card flex h-full flex-col overflow-hidden" aria-labelledby="importer-title">
       <div className="flex flex-col gap-3 border-b border-slate-700/70 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
         <div className="min-w-0">
           <p className="label-mono text-rose-400">Step 01 · Import Batch</p>
@@ -132,7 +132,7 @@ export function UrlBatchImporter({ onEntries }: UrlBatchImporterProps) {
         </button>
       </div>
 
-      <div className="px-3 py-3 sm:px-4">
+      <div className="flex flex-1 flex-col px-3 py-3 sm:px-4">
         <div
           role="tablist"
           aria-label="Mode input URL"
@@ -173,7 +173,7 @@ export function UrlBatchImporter({ onEntries }: UrlBatchImporterProps) {
         </div>
 
         {tab === "text" ? (
-          <div role="tabpanel" id="panel-text" aria-labelledby="tab-text">
+          <div role="tabpanel" id="panel-text" aria-labelledby="tab-text" className="flex flex-1 flex-col">
             <label htmlFor="batch-text" className="sr-only">
               Daftar URL peserta, satu per baris
             </label>
@@ -184,7 +184,7 @@ export function UrlBatchImporter({ onEntries }: UrlBatchImporterProps) {
               placeholder={PLACEHOLDER}
               spellCheck={false}
               rows={8}
-              className="input min-h-[170px] resize-y font-mono text-xs leading-relaxed"
+              className="input min-h-[170px] flex-1 resize-y font-mono text-xs leading-relaxed"
             />
             <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
               <p className="font-mono text-[10px] text-slate-500">

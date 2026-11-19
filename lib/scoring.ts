@@ -146,7 +146,7 @@ export function emptyScore(): ScoreDetail {
     secData: 0,
     secHeaders: 0,
     secLogic: 0,
-    personal: 0,
+    personal: 8,
     notes: "",
     updatedAt: null,
     judged: false,

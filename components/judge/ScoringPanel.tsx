@@ -105,7 +105,8 @@ function ScoreRow({
         <div className="min-w-0">
           <label
             htmlFor={`score-${config.field}`}
-            className="block text-[11px] font-semibold leading-snug text-slate-200"
+            title={config.helper}
+            className="block cursor-help text-[11px] font-semibold leading-snug text-slate-200"
           >
             {config.label}
           </label>
@@ -300,11 +301,33 @@ export function ScoringPanel({
 
           <dl className="mt-2 grid grid-cols-3 gap-1.5">
             {[
-              { label: "Produk/UX", value: product, max: 60, tone: "text-emerald-300" },
-              { label: "Security", value: security, max: 25, tone: "text-sky-300" },
-              { label: "Personal", value: personal, max: 15, tone: "text-amber-300" },
+              {
+                label: "Produk/UX",
+                value: product,
+                max: 60,
+                tone: "text-emerald-300",
+                tip: "Aspek Produk & UX (maks 60): Kesiapan MVP (25) + Kualitas UI/UX (20) + Fitur & Performa (15).",
+              },
+              {
+                label: "Security",
+                value: security,
+                max: 25,
+                tone: "text-sky-300",
+                tip: "Aspek Security OWASP (maks 25): XSS (5) + Auth (5) + Data Sensitif (5) + Headers (5) + Logika Bisnis (5).",
+              },
+              {
+                label: "Personal",
+                value: personal,
+                max: 15,
+                tone: "text-amber-300",
+                tip: "Apresiasi Personal Juri / X-Factor (maks 15, default 8): orisinalitas ide, kreativitas, dan ketelitian eksekusi.",
+              },
             ].map((item) => (
-              <div key={item.label} className="rounded-md bg-slate-950/50 px-1.5 py-1">
+              <div
+                key={item.label}
+                title={item.tip}
+                className="cursor-help rounded-md bg-slate-950/50 px-1.5 py-1"
+              >
                 <dt className="label-mono text-[9px]">{item.label}</dt>
                 <dd className={`font-mono text-xs font-bold ${item.tone}`}>
                   {item.value}
