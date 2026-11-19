@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ResetSessionButton } from "@/components/layout/ResetSessionButton";
 import { WinnersPodiumModal } from "@/components/leaderboard/WinnersPodiumModal";
 import {
@@ -51,8 +51,6 @@ export default function LeaderboardPage() {
   const [exporting, setExporting] = useState(false);
   const [popupBlocked, setPopupBlocked] = useState(false);
   const [podiumOpen, setPodiumOpen] = useState(false);
-  const [bgmEnabled, setBgmEnabled] = useState(true);
-  const bgmRef = useRef<HTMLAudioElement | null>(null);
 
   const ranked = useMemo(
     () =>
@@ -86,47 +84,6 @@ export default function LeaderboardPage() {
   useEffect(() => {
     setPopupBlocked(false);
   }, [session]);
-
-  useEffect(() => {
-    if (!bgmEnabled || podiumOpen) {
-      if (bgmRef.current) {
-        bgmRef.current.pause();
-      }
-      return;
-    }
-
-    if (!bgmRef.current) {
-      bgmRef.current = new Audio("/audio/ceremony-bgm.mp3");
-      bgmRef.current.loop = true;
-      bgmRef.current.volume = 0.4;
-    }
-
-    const tryPlay = () => {
-      if (!bgmRef.current || !bgmEnabled || podiumOpen) return;
-      void bgmRef.current.play().catch(() => {});
-    };
-
-    tryPlay();
-    const onInteract = () => {
-      tryPlay();
-    };
-    window.addEventListener("pointerdown", onInteract, { once: true });
-    window.addEventListener("keydown", onInteract, { once: true });
-    return () => {
-      window.removeEventListener("pointerdown", onInteract);
-      window.removeEventListener("keydown", onInteract);
-    };
-  }, [bgmEnabled, podiumOpen]);
-
-  useEffect(
-    () => () => {
-      if (bgmRef.current) {
-        bgmRef.current.pause();
-        bgmRef.current.currentTime = 0;
-      }
-    },
-    [],
-  );
 
   const reviewEntry = (entry: JudgeEntry, sourceIndex: number) => {
     const popup = openPreviewWindow(entry.url);
@@ -262,14 +219,6 @@ export default function LeaderboardPage() {
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <ResetSessionButton className="btn-ghost px-2 py-1.5 text-[11px]" label="Reset" />
-          <button
-            type="button"
-            className="btn-secondary px-2.5 py-1.5 text-[11px]"
-            onClick={() => setBgmEnabled((prev) => !prev)}
-            title="Toggle musik latar halaman klasemen"
-          >
-            {bgmEnabled ? "Musik: On" : "Musik: Off"}
-          </button>
           <button
             type="button"
             className="btn border-amber-500/50 bg-amber-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-amber-400"

@@ -360,7 +360,7 @@ export function WinnersPodiumModal({
     requestAnimationFrame(tick);
   }, []);
 
-  // Reset selalu ke Tahap 1 (kosong) saat modal dibuka
+  // Reset selalu ke Tahap 1 (kosong) saat modal dibuka, dan putar BGM loop di Panggung Juara
   useEffect(() => {
     if (!open) {
       clearTimers();
@@ -373,7 +373,10 @@ export function WinnersPodiumModal({
     setStepIndex(0);
     setAutoRunning(false);
     setElapsedSec(0);
-  }, [open, clearTimers, stopAllAudio]);
+    if (soundOn) {
+      startBgm(true);
+    }
+  }, [open, clearTimers, stopAllAudio, startBgm, soundOn]);
 
   useEffect(
     () => () => {
@@ -462,48 +465,48 @@ export function WinnersPodiumModal({
     setStepIndex(0);
   }, [clearTimers, stopAllAudio]);
 
-  // Auto Run pas 30 detik
-  const startAutoRun30s = useCallback(() => {
+  // Auto Run pas 60 detik
+  const startAutoRun60s = useCallback(() => {
     clearTimers();
     stopAllAudio();
     setEditing(false);
     setAutoRunning(true);
     setStepIndex(0);
     setElapsedSec(0);
-    startBgm(false);
+    startBgm(true);
 
     const startedAt = Date.now();
     intervalRef.current = window.setInterval(() => {
-      const sec = Math.min(30, Math.floor((Date.now() - startedAt) / 1000));
+      const sec = Math.min(60, Math.floor((Date.now() - startedAt) / 1000));
       setElapsedSec(sec);
     }, 250);
 
-    // Jadwal 30 detik sesuai jumlah step (index 1 .. steps.length-1)
+    // Jadwal 60 detik sesuai jumlah step (index 1 .. steps.length-1)
     const scheduleMs: number[] =
       config.topCount === 5
         ? [
-            500, // zoom 5
-            3000, // place 5
-            5000, // zoom 4
-            7500, // place 4
-            9500, // zoom 3
-            12300, // place 3
-            14500, // zoom 2
-            17300, // place 2
-            19500, // suspense jeda mendebarkan + lampu sorot (4.5s)
-            24000, // zoom 1 + fanfare + konfeti
-            27500, // place 1
-            30000, // done
+            1000, // zoom 5
+            6000, // place 5
+            10000, // zoom 4
+            15000, // place 4
+            19000, // zoom 3
+            25000, // place 3
+            29000, // zoom 2
+            35000, // place 2
+            39000, // suspense jeda mendebarkan + lampu sorot (8s)
+            47000, // zoom 1 + fanfare + konfeti
+            54000, // place 1
+            60000, // done
           ]
         : [
-            600, // zoom 3
-            4200, // place 3
-            7800, // zoom 2
-            11400, // place 2
-            15000, // suspense jeda mendebarkan (5.5s)
-            20500, // zoom 1 + fanfare + konfeti
-            26000, // place 1
-            30000, // done
+            1200, // zoom 3
+            8500, // place 3
+            15500, // zoom 2
+            23000, // place 2
+            30000, // suspense jeda mendebarkan (10s)
+            40000, // zoom 1 + fanfare + konfeti
+            52000, // place 1
+            60000, // done
           ];
 
     scheduleMs.forEach((ms, offset) => {
@@ -516,7 +519,7 @@ export function WinnersPodiumModal({
         if (targetIdx === steps.length - 1) {
           setAutoRunning(false);
           clearTimers();
-          setElapsedSec(30);
+          setElapsedSec(60);
         }
       }, ms);
       timersRef.current.push(tid);
@@ -540,27 +543,19 @@ export function WinnersPodiumModal({
   const isSuspense = currentStep.type === "suspense";
   const isIdle = currentStep.type === "idle";
   const isDone = currentStep.type === "done";
-
-  const statusText = isIdle
-    ? "Tahap 1: Panggung siap — klik Mulai (Auto 30 dtk) atau Next untuk memulai"
-    : isSuspense
-      ? "Jeda Mendebarkan… Siapakah Juara 1?"
-      : zoomedWinner
-        ? zoomedWinner.rank === 1
-          ? "Selamat kepada Juara 1!"
-          : `Mengumumkan Juara ${zoomedWinner.rank}!`
-        : currentStep.type === "place"
-          ? currentStep.rank === 1
-            ? "Juara 1 menempati Podium Utama!"
-            : `Juara ${currentStep.rank} menempati posisi #${currentStep.rank}`
-          : "Pengumuman Juara Selesai!";
+  const canClickStageToNext = !editing && !isDone && winners.length > 0;
 
   return (
     <div
       role="dialog"
       aria-modal="true"
       aria-label="Panggung Pengumuman Juara"
-      className="dark fixed inset-0 z-50 overflow-y-auto bg-[#130638] text-white"
+      onClick={() => {
+        if (canClickStageToNext) goNextStep();
+      }}
+      className={`dark fixed inset-0 z-50 overflow-y-auto bg-[#130638] text-white ${
+        canClickStageToNext ? "cursor-pointer" : ""
+      }`}
     >
       <canvas ref={canvasRef} className="pointer-events-none fixed inset-0 z-50 h-full w-full" />
 
@@ -617,7 +612,10 @@ export function WinnersPodiumModal({
 
       <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-[1160px] flex-col px-4 py-5 sm:px-6">
         {/* Header Bar */}
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
+        <header
+          onClick={(e) => e.stopPropagation()}
+          className="flex cursor-default flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4"
+        >
           <div className="flex items-center gap-2.5">
             <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/20 bg-white/10 text-[#fde047]">
               <IconTrophy className="h-4 w-4" />
@@ -627,7 +625,7 @@ export function WinnersPodiumModal({
                 Panggung Pemenang · Top {config.topCount}
               </p>
               <p className="text-xs font-bold text-white/90">
-                {autoRunning ? `Auto Run · ${elapsedSec} / 30 dtk` : "Vibe-Juri Awards Stage"}
+                {autoRunning ? `Auto Run · ${elapsedSec} / 60 dtk` : "Vibe-Juri Awards Stage"}
               </p>
             </div>
           </div>
@@ -644,12 +642,12 @@ export function WinnersPodiumModal({
 
             <button
               type="button"
-              onClick={startAutoRun30s}
+              onClick={startAutoRun60s}
               disabled={winners.length === 0}
               className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#fbbf24] px-3.5 text-xs font-extrabold text-[#1e1b4b] shadow-[0_6px_24px_rgba(251,191,36,0.38)] transition hover:bg-[#fcd34d] disabled:opacity-50"
             >
               <PlaySvg className="h-3.5 w-3.5" />
-              <span>{autoRunning ? `Auto (${elapsedSec}s/30s)` : "Auto Run 30 dtk"}</span>
+              <span>{autoRunning ? `Auto (${elapsedSec}s/60s)` : "Auto Run 60 dtk"}</span>
             </button>
 
             {!isDone ? (
@@ -720,11 +718,6 @@ export function WinnersPodiumModal({
             <CrownSvg className="h-5 w-5 text-[#d97706]" />
             <h2 className="text-lg font-black tracking-tight sm:text-2xl">{config.title}</h2>
           </div>
-
-          <span className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-[#fbbf24]/45 bg-[#fbbf24]/15 px-4 py-1 text-xs font-bold tracking-wide text-[#fde68a]">
-            <SparkBurstSvg className="h-3.5 w-3.5 text-[#fbbf24]" />
-            {statusText}
-          </span>
         </div>
 
         {/* Kartu Sorotan Utama (hanya tampil setelah juara yang disorot sudah diumumkan) */}
@@ -739,6 +732,7 @@ export function WinnersPodiumModal({
                 href={highlightedWinner.entry.url}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
                 className="inline-flex items-center gap-2 text-xl font-black tracking-tight text-white transition hover:text-[#fde047] sm:text-2xl"
               >
                 {hostOf(highlightedWinner.entry.url)}
@@ -949,7 +943,10 @@ export function WinnersPodiumModal({
 
         {/* Panel Edit Juri */}
         {editing ? (
-          <div className="mt-6 rounded-2xl border border-white/20 bg-[#090d1f]/95 p-4 text-white shadow-2xl">
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="mt-6 cursor-default rounded-2xl border border-white/20 bg-[#090d1f]/95 p-4 text-white shadow-2xl"
+          >
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
               <div>
                 <h3 className="text-sm font-bold text-white">Pengaturan Juara &amp; Kategori Juri</h3>
