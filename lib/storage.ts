@@ -135,10 +135,28 @@ export function loadSession(): SessionState | null {
   }
 }
 
+function stripScreenshotsForStorage(session: SessionState): SessionState {
+  return {
+    ...session,
+    entries: session.entries.map((entry) =>
+      entry.audit?.screenshotDataUrl
+        ? {
+            ...entry,
+            audit: {
+              ...entry.audit,
+              screenshotDataUrl: null,
+            },
+          }
+        : entry,
+    ),
+  };
+}
+
 export function saveSession(session: SessionState): boolean {
   if (typeof window === "undefined") return false;
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+    const compact = stripScreenshotsForStorage(session);
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(compact));
     return true;
   } catch {
     return false;
