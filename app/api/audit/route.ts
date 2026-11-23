@@ -5,9 +5,9 @@ import { assertPublicUrl } from "@/lib/urlGuard";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 30;
+export const maxDuration = 45;
 
-const WORKER_TIMEOUT_MS = 25_000;
+const WORKER_TIMEOUT_MS = 40_000;
 
 const EXPECTED_CONTRACT = {
   request: { url: "https://karya-peserta.vercel.app" },
@@ -146,7 +146,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, mode: "worker", audit });
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
-      return badRequest("Audit timeout setelah 25 detik. Coba lagi atau impor JSON manual.", 504);
+      return badRequest("Audit timeout setelah 40 detik. Coba lagi atau impor JSON manual.", 504);
     }
     if (error instanceof Error && error.message.includes("audit")) {
       return badRequest(error.message, 502);

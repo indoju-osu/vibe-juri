@@ -357,36 +357,43 @@ MEASURE_JS = """
 """
 
 
-async def prepare_lazy_images(page) -> None:
+async def prepare_lazy_images(page, fast: bool = False) -> None:
     """Scroll bertahap agar gambar lazy-load / below-the-fold sempat dimuat sebelum audit DOM."""
     try:
         scroll_height = await page.evaluate("() => document.documentElement.scrollHeight || 0")
+        step_wait = 120 if fast else 220
+        img_wait = 900 if fast else 1800
         if scroll_height > 768:
-            for frac in (0.35, 0.7, 1.0):
+            for frac in (0.4, 0.8, 1.0):
                 await page.evaluate(f"() => window.scrollTo(0, {int(scroll_height * frac)})")
-                await page.wait_for_timeout(250)
+                await page.wait_for_timeout(step_wait)
         await page.evaluate(
-            """() => Promise.all(
+            """(imgWait) => Promise.all(
                 Array.from(document.images)
                   .filter((img) => !img.complete)
                   .map((img) => new Promise((res) => {
-                    const timer = setTimeout(res, 2000);
+                    const timer = setTimeout(res, imgWait);
                     img.addEventListener('load', () => { clearTimeout(timer); res(); }, { once: true });
                     img.addEventListener('error', () => { clearTimeout(timer); res(); }, { once: true });
                   }))
-            )"""
+            )""",
+            img_wait,
         )
         await page.evaluate("() => window.scrollTo(0, 0)")
-        await page.wait_for_timeout(150)
+        await page.wait_for_timeout(100 if fast else 150)
     except Exception:  # noqa: BLE001
         pass
 
 
-async def discover_and_crawl_routes(page, base_url: str, base_metrics: dict, base_body: str) -> tuple[dict, str, list[str]]:
-    """Auto-Discovery: kunjungi maks 3 rute internal / tab utama untuk menemukan foto & fitur katalog."""
+async def discover_and_crawl_routes(
+    page, base_url: str, base_metrics: dict, base_body: str, started: float
+) -> tuple[dict, str, list[str]]:
+    """Auto-Discovery: kunjungi maks 2 rute internal / tab utama untuk menemukan foto & fitur katalog."""
     merged = dict(base_metrics)
     best_body = base_body
     discovered: list[str] = []
+    if time.time() - started > 15.0:
+        return merged, best_body, discovered
     parsed_base = urlparse(base_url)
     origin = f"{parsed_base.scheme}://{parsed_base.netloc}"
 
@@ -413,16 +420,18 @@ async def discover_and_crawl_routes(page, base_url: str, base_metrics: dict, bas
                 } catch {}
               });
               scored.sort((a, b) => a.score - b.score);
-              return scored.slice(0, 3).map((x) => x.url);
+              return scored.slice(0, 2).map((x) => x.url);
             }""",
             origin,
         )
 
         for route_url in candidates:
+            if time.time() - started > 16.0:
+                break
             try:
-                await page.goto(route_url, wait_until="domcontentloaded", timeout=6000)
-                await page.wait_for_timeout(450)
-                await prepare_lazy_images(page)
+                await page.goto(route_url, wait_until="domcontentloaded", timeout=4500)
+                await page.wait_for_timeout(250)
+                await prepare_lazy_images(page, fast=True)
                 m = await page.evaluate(MEASURE_JS)
                 txt = await page.evaluate("() => document.body.innerText.trim()")
                 discovered.append(urlparse(route_url).path or "/")
@@ -473,18 +482,20 @@ async def discover_and_crawl_routes(page, base_url: str, base_metrics: dict, bas
     return merged, best_body, discovered
 
 
-async def run_auth_form_probes(page, base_url: str) -> dict:
+async def run_auth_form_probes(page, base_url: str, started: float) -> dict:
     """Test Login & Test Daftar: cari form login/register lalu uji validasi dasar dengan aman."""
     parsed = urlparse(base_url)
     origin = f"{parsed.scheme}://{parsed.netloc}"
     login_test = "not_found"
     register_test = "not_found"
+    if time.time() - started > 19.0:
+        return {"loginTest": login_test, "registerTest": register_test}
 
     async def _open_auth_target(paths: tuple[str, ...], btn_rx: str) -> bool:
-        # Cek di halaman saat ini dulu atau klik link/tombol yang cocok
         try:
-            await page.goto(base_url, wait_until="domcontentloaded", timeout=5000)
-            await page.wait_for_timeout(300)
+            if page.url.rstrip("/") != base_url.rstrip("/"):
+                await page.goto(base_url, wait_until="domcontentloaded", timeout=4000)
+                await page.wait_for_timeout(200)
             clicked = await page.evaluate(
                 """(rxStr) => {
                   const rx = new RegExp(rxStr, 'i');
@@ -496,16 +507,18 @@ async def run_auth_form_probes(page, base_url: str) -> dict:
                 btn_rx,
             )
             if clicked:
-                await page.wait_for_timeout(450)
+                await page.wait_for_timeout(350)
                 if await page.locator('input[type="password"]:visible').count() > 0:
                     return True
         except Exception:  # noqa: BLE001
             pass
-        for p in paths:
+        for p in paths[:1]:
+            if time.time() - started > 18.0:
+                break
             try:
-                resp = await page.goto(origin + p, wait_until="domcontentloaded", timeout=4500)
+                resp = await page.goto(origin + p, wait_until="domcontentloaded", timeout=3000)
                 if resp and resp.status < 400:
-                    await page.wait_for_timeout(350)
+                    await page.wait_for_timeout(250)
                     if await page.locator('input[type="password"]:visible').count() > 0:
                         return True
             except Exception:  # noqa: BLE001
@@ -684,7 +697,7 @@ async def audit_url(url: str) -> dict:
                 pass
 
             metrics, best_body, discovered_routes = await discover_and_crawl_routes(
-                page, base_page_url, metrics, body_text
+                page, base_page_url, metrics, body_text, started
             )
             text_lower = best_body.lower()
 
@@ -738,7 +751,7 @@ async def audit_url(url: str) -> dict:
                 result.setdefault("pathsProbed", 0)
 
             try:
-                auth_probes = await run_auth_form_probes(page, base_page_url)
+                auth_probes = await run_auth_form_probes(page, base_page_url, started)
                 result.update(auth_probes)
             except Exception:  # noqa: BLE001
                 pass
