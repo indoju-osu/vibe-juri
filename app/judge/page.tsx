@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
+import { AddUrlsDialog } from "@/components/judge/AddUrlsDialog";
 import { AutoAuditBadge } from "@/components/judge/AutoAuditBadge";
 import { BulkAutoAudit } from "@/components/judge/BulkAutoAudit";
 import { ScoringPanel } from "@/components/judge/ScoringPanel";
@@ -12,12 +13,14 @@ import {
   IconCheckCircle,
   IconGauge,
   IconLink,
+  IconPlus,
   IconSearch,
   IconTrophy,
 } from "@/components/ui/icons";
 import { seedUntouchedScore } from "@/lib/autoScore";
 import { entryFinalScore, sessionStats } from "@/lib/ranking";
 import { totalScore } from "@/lib/scoring";
+import type { SessionAdditionPreview } from "@/lib/storage";
 import { toast } from "@/lib/toast";
 import { useSession } from "@/lib/useSession";
 import type { AuditResult, ScoreDetail } from "@/types";
@@ -33,6 +36,7 @@ function hostOf(url: string): string {
 export default function JudgePage() {
   const { session, loaded, update } = useSession();
   const [queueQuery, setQueueQuery] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
 
   const index = session?.activeIndex ?? 0;
   const total = session?.entries.length ?? 0;
@@ -114,6 +118,32 @@ export default function JudgePage() {
     [update],
   );
 
+  const handleAddUrls = useCallback(
+    (preview: SessionAdditionPreview, jumpToNew: boolean) => {
+      if (preview.addedEntries.length === 0) return;
+      let nextTotal = 0;
+      update((draft) => {
+        const firstNewIndex = draft.entries.length;
+        draft.entries.push(...preview.addedEntries);
+        if (preview.ignoredEntries.length > 0) {
+          draft.ignored.push(...preview.ignoredEntries);
+        }
+        if (jumpToNew) {
+          draft.activeIndex = firstNewIndex;
+        }
+        nextTotal = draft.entries.length;
+      });
+      const skipped = preview.ignoredEntries.length;
+      toast(
+        `${preview.addedEntries.length} URL baru ditambahkan (total ${nextTotal} karya)${
+          skipped > 0 ? ` · ${skipped} duplikat/tidak valid diabaikan` : ""
+        }.`,
+        "success",
+      );
+    },
+    [update],
+  );
+
   const filteredQueue = useMemo(() => {
     if (!session) return [];
     const query = queueQuery.trim().toLowerCase();
@@ -181,6 +211,18 @@ export default function JudgePage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setAddOpen(true)}
+            className={
+              stats.judged === stats.total
+                ? "btn-primary px-2.5 py-1.5 text-[11px]"
+                : "btn-secondary px-2.5 py-1.5 text-[11px]"
+            }
+          >
+            <IconPlus className="h-3.5 w-3.5" />
+            Tambah URL
+          </button>
           <Link href="/leaderboard" className="btn-secondary px-2.5 py-1.5 text-[11px]">
             <IconTrophy className="h-3.5 w-3.5" />
             Klasemen
@@ -225,6 +267,26 @@ export default function JudgePage() {
         </div>
       </div>
 
+      {stats.judged === stats.total && stats.total > 0 ? (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5">
+          <div className="flex min-w-0 items-center gap-2">
+            <IconCheckCircle className="h-4 w-4 shrink-0 text-emerald-400" />
+            <p className="text-xs text-emerald-100">
+              Semua <span className="font-bold">{stats.total}</span> karya selesai dinilai. Ingin
+              menambah 1 atau beberapa URL susulan tanpa menghapus sesi ini?
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setAddOpen(true)}
+            className="btn-success px-2.5 py-1.5 text-[11px]"
+          >
+            <IconPlus className="h-3.5 w-3.5" />
+            Tambah URL Baru
+          </button>
+        </div>
+      ) : null}
+
       <div className="mt-3">
         <BulkAutoAudit
           sessionKey={session.createdAt}
@@ -265,10 +327,21 @@ export default function JudgePage() {
                   {filteredQueue.length} dari {total} URL
                 </h2>
               </div>
-              <span className="chip border-slate-600 bg-slate-900 text-slate-400">
-                <IconCheckCircle className="h-3 w-3 text-emerald-400" />
-                {stats.judged} selesai
-              </span>
+              <div className="flex items-center gap-1.5">
+                <span className="chip border-slate-600 bg-slate-900 text-slate-400">
+                  <IconCheckCircle className="h-3 w-3 text-emerald-400" />
+                  {stats.judged} selesai
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setAddOpen(true)}
+                  className="btn-ghost px-2 py-1 text-[10px] text-rose-300 hover:text-rose-200"
+                  title="Tambah 1 atau beberapa URL ke antrean tanpa menghapus sesi"
+                >
+                  <IconPlus className="h-3 w-3" />
+                  Tambah
+                </button>
+              </div>
             </div>
             <div className="border-b border-slate-700/60 p-2">
               <div className="relative">
@@ -379,6 +452,13 @@ export default function JudgePage() {
         <kbd className="rounded border border-slate-700 bg-slate-900 px-1 font-mono">→</kbd> untuk
         berpindah karya tanpa menutup jendela preview.
       </p>
+
+      <AddUrlsDialog
+        open={addOpen}
+        existingEntries={session.entries}
+        onClose={() => setAddOpen(false)}
+        onAdd={handleAddUrls}
+      />
     </main>
   );
 }

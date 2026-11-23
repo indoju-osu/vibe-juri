@@ -2,6 +2,7 @@ import { normalizeAudit } from "@/lib/audit";
 import { seedUntouchedScore } from "@/lib/autoScore";
 import { makeId } from "@/lib/id";
 import { clampField, emptyScore } from "@/lib/scoring";
+import { cleanBatch } from "@/lib/urlCleaner";
 import type {
   AuditResult,
   CleanedUrl,
@@ -84,6 +85,60 @@ export function buildSession(valid: CleanedUrl[], ignored: IgnoredEntry[]): Sess
     activeIndex: 0,
     entries: valid.map(createEntry),
     ignored,
+  };
+}
+
+export interface SessionAdditionPreview {
+  addedEntries: JudgeEntry[];
+  ignoredEntries: IgnoredEntry[];
+  duplicateCount: number;
+  invalidCount: number;
+  totalInput: number;
+}
+
+/**
+ * Sanitizes 1 or more raw URLs and filters out duplicates against the current session
+ * so they can be appended without resetting existing scores or audits.
+ */
+export function prepareSessionAdditions(
+  existingEntries: JudgeEntry[],
+  rawInputs: string[],
+): SessionAdditionPreview {
+  const cleaned = cleanBatch(rawInputs);
+  const existingByKey = new Map(existingEntries.map((entry) => [entry.key, entry.url]));
+
+  const addedEntries: JudgeEntry[] = [];
+  const sessionDuplicates: IgnoredEntry[] = [];
+
+  for (const item of cleaned.valid) {
+    const existingUrl = existingByKey.get(item.key);
+    if (existingUrl) {
+      sessionDuplicates.push({
+        id: makeId("dup"),
+        url: item.raw.trim() || item.url,
+        category: "Duplikat (Diabaikan)",
+        detail: `Sudah ada di sesi (${existingUrl})`,
+      });
+      continue;
+    }
+    existingByKey.set(item.key, item.url);
+    addedEntries.push(createEntry(item));
+  }
+
+  const ignoredEntries = [...sessionDuplicates, ...cleaned.ignored];
+  let duplicateCount = 0;
+  let invalidCount = 0;
+  for (const item of ignoredEntries) {
+    if (item.category === "Duplikat (Diabaikan)") duplicateCount += 1;
+    else invalidCount += 1;
+  }
+
+  return {
+    addedEntries,
+    ignoredEntries,
+    duplicateCount,
+    invalidCount,
+    totalInput: cleaned.totalInput,
   };
 }
 
