@@ -365,7 +365,7 @@ export function AutoAuditBadge({
                 className={
                   audit.rasterImages === 0 ? "text-rose-300" : "text-emerald-300"
                 }
-                hint="Jumlah foto produk asli (JPG/PNG/WebP/AVIF) berukuran >= 80px."
+                hint="Jumlah foto produk asli (JPG/PNG/WebP/AVIF) berukuran >= 48px atau terdeteksi di network/rute."
               />
               <Metric
                 label="Ilustrasi SVG"
@@ -386,6 +386,63 @@ export function AutoAuditBadge({
                 hint="Jumlah security header standar yang terdeteksi (CSP, X-Content-Type-Options, X-Frame-Options, HSTS, Referrer-Policy)."
               />
             </div>
+
+            {audit.loginTest || audit.registerTest || typeof audit.brokenImages === "number" || (audit.discoveredRoutes && audit.discoveredRoutes.length > 0) ? (
+              <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-slate-700/70 bg-slate-950/40 px-2 py-1.5 text-[10px]">
+                {typeof audit.brokenImages === "number" ? (
+                  <span
+                    className={`chip ${
+                      audit.brokenImages === 0
+                        ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                        : "border-rose-500/30 bg-rose-500/10 text-rose-300"
+                    }`}
+                  >
+                    QA Img: {audit.brokenImages === 0 ? "OK" : `${audit.brokenImages} rusak`}
+                  </span>
+                ) : null}
+                {audit.loginTest ? (
+                  <span
+                    className={`chip ${
+                      audit.loginTest === "passed"
+                        ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                        : audit.loginTest === "failed"
+                          ? "border-rose-500/30 bg-rose-500/10 text-rose-300"
+                          : "border-slate-700 bg-slate-900 text-slate-400"
+                    }`}
+                  >
+                    Test Login:{" "}
+                    {audit.loginTest === "passed"
+                      ? "OK"
+                      : audit.loginTest === "failed"
+                        ? "Bypass/Gagal"
+                        : "Tidak ada"}
+                  </span>
+                ) : null}
+                {audit.registerTest ? (
+                  <span
+                    className={`chip ${
+                      audit.registerTest === "passed"
+                        ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                        : audit.registerTest === "failed"
+                          ? "border-rose-500/30 bg-rose-500/10 text-rose-300"
+                          : "border-slate-700 bg-slate-900 text-slate-400"
+                    }`}
+                  >
+                    Test Daftar:{" "}
+                    {audit.registerTest === "passed"
+                      ? "OK"
+                      : audit.registerTest === "failed"
+                        ? "Bermasalah"
+                        : "Tidak ada"}
+                  </span>
+                ) : null}
+                {audit.discoveredRoutes && audit.discoveredRoutes.length > 0 ? (
+                  <span className="chip border-sky-500/30 bg-sky-500/10 text-sky-300">
+                    Discovery: {audit.discoveredRoutes.join(", ")}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
 
             {audit.securityHeaders.length > 0 ? (
               <details className="rounded-md border border-slate-700/70 bg-slate-950/40 px-2 py-1.5">

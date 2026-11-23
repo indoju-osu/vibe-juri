@@ -74,6 +74,10 @@ export interface AuditResult {
   searchWorks: boolean | null;
   negativeQtyRejected: boolean | null;
   stockGuardDetected: boolean | null;
+  discoveredRoutes?: string[] | null;
+  brokenImages?: number | null;
+  loginTest?: "passed" | "failed" | "not_found" | null;
+  registerTest?: "passed" | "failed" | "not_found" | null;
   screenshotDataUrl: string | null;
 
   locked: boolean | null;

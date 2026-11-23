@@ -115,7 +115,7 @@ function imageMetrics(html: string): { raster: number; svg: number } {
 
     const width = Number.parseInt(attrValue(tag, "width") ?? "", 10);
     const height = Number.parseInt(attrValue(tag, "height") ?? "", 10);
-    const tooSmall = (Number.isFinite(width) && width < 80) || (Number.isFinite(height) && height < 80);
+    const tooSmall = (Number.isFinite(width) && width < 48) || (Number.isFinite(height) && height < 48);
     if (!tooSmall) raster += 1;
   }
 

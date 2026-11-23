@@ -108,6 +108,11 @@ function normalizeTypography(value: unknown): "Baik" | "Datar" | null {
   return null;
 }
 
+function normalizeAuthTest(value: unknown): "passed" | "failed" | "not_found" | null {
+  if (value === "passed" || value === "failed" || value === "not_found") return value;
+  return null;
+}
+
 /** Normalize worker / manually-pasted audit JSON into a stable shape. */
 export function normalizeAudit(
   input: unknown,
@@ -277,6 +282,12 @@ export function normalizeAudit(
     stockGuardDetected: toBooleanOrNull(
       pick(record, ["stockGuardDetected", "stock_guard_detected"]),
     ),
+    discoveredRoutes: normalizeStringList(
+      pick(record, ["discoveredRoutes", "discovered_routes"]),
+    ),
+    brokenImages: toIntOrNull(pick(record, ["brokenImages", "broken_images"])),
+    loginTest: normalizeAuthTest(pick(record, ["loginTest", "login_test"])),
+    registerTest: normalizeAuthTest(pick(record, ["registerTest", "register_test"])),
     screenshotDataUrl: toDataUrlOrNull(
       pick(record, ["screenshotDataUrl", "screenshot_data_url", "screenshot"]),
     ),
@@ -352,6 +363,10 @@ export function createFailedAudit(
     searchWorks: null,
     negativeQtyRejected: null,
     stockGuardDetected: null,
+    discoveredRoutes: null,
+    brokenImages: null,
+    loginTest: null,
+    registerTest: null,
     screenshotDataUrl: null,
     locked: null,
     platformError: null,

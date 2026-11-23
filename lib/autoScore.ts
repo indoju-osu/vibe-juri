@@ -90,6 +90,14 @@ function collectNotes(audit: AuditResult, metrics: {
   if (metrics.errors !== null && metrics.errors > 0) {
     notes.push(`${metrics.errors} JS error`);
   }
+  if (typeof audit.brokenImages === "number" && audit.brokenImages > 0) {
+    notes.push(`${audit.brokenImages} gambar produk rusak/gagal dimuat (broken image)`);
+  }
+  if (audit.discoveredRoutes && audit.discoveredRoutes.length > 0) {
+    notes.push(
+      `Auto-Discovery memeriksa ${audit.discoveredRoutes.length} rute: ${audit.discoveredRoutes.join(", ")}`,
+    );
+  }
   if (notes.length === 0) notes.push("UI/UX baik dan fungsionalitas berjalan normal");
   return notes;
 }
@@ -344,6 +352,18 @@ export function autoSecurityFromAudit(audit: AuditResult): AutoSecurity {
     } else {
       notes.push("Rute sensitif tertutup / terproteksi");
     }
+  }
+
+  if (audit.loginTest === "failed") {
+    auth = Math.min(auth, 1);
+    notes.push("Uji form login: kredensial dummy tidak ditolak / berpotensi bypass");
+  } else if (audit.loginTest === "passed") {
+    notes.push("Uji form login: validasi penolakan kredensial salah berfungsi");
+  }
+  if (audit.registerTest === "passed") {
+    notes.push("Uji form daftar: form & validasi registrasi berfungsi");
+  } else if (audit.registerTest === "failed") {
+    notes.push("Uji form daftar: form registrasi bermasalah/error saat diuji");
   }
 
   /* 4.5 Logika bisnis (5) — heuristik otomatis + verifikasi juri ----------------- */

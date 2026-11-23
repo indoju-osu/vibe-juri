@@ -154,10 +154,17 @@ async def run_security_probes(
             if path == "/admin":
                 try:
                     await page.goto(origin + "/admin", wait_until="domcontentloaded", timeout=4500)
-                    await page.wait_for_timeout(450)
+                    await page.wait_for_timeout(550)
                     final_url = page.url.lower()
                     has_pw = await page.locator('input[type="password"]').count() > 0
-                    if has_pw or any(tok in final_url for tok in ("login", "signin", "sign-in", "auth")):
+                    admin_text = await page.evaluate("() => (document.body.innerText || '').toLowerCase()")
+                    has_denied_msg = bool(
+                        re.search(
+                            r"akses\s*ditolak|unauthorized|forbidden|login\s+untuk\s+melanjutkan|masuk\s+sebagai\s+admin",
+                            admin_text,
+                        )
+                    )
+                    if has_pw or has_denied_msg or any(tok in final_url for tok in ("login", "signin", "sign-in", "auth")):
                         client_auth_protected = True
                         continue
                 except Exception:  # noqa: BLE001
@@ -271,24 +278,40 @@ async def run_functional_probes(page) -> dict:
 MEASURE_JS = """
 () => {
   let realRasterPhotos = 0;
+  let brokenImages = 0;
   let svgIllustrations = document.querySelectorAll('svg').length;
 
   document.querySelectorAll('img').forEach((img) => {
     const rect = img.getBoundingClientRect();
-    const src = (img.currentSrc || img.src || '').toLowerCase();
+    const src = (img.currentSrc || img.src || img.getAttribute('data-src') || '').toLowerCase();
     const isVector = src.includes('.svg') || src.startsWith('data:image/svg');
-    if (img.complete && img.naturalWidth > 80 && rect.width >= 80 && rect.height >= 80) {
+    if (src && !isVector && img.complete && img.naturalWidth === 0) {
+      brokenImages += 1;
+    }
+    const hasLoadedRaster = img.complete && img.naturalWidth > 48 && img.naturalHeight > 48;
+    const hasVisibleSize = rect.width >= 48 && rect.height >= 48;
+    const isLargeHiddenPhoto = img.naturalWidth >= 120 && img.naturalHeight >= 120;
+    if (hasLoadedRaster && (hasVisibleSize || isLargeHiddenPhoto)) {
       if (isVector) svgIllustrations += 1;
       else realRasterPhotos += 1;
     }
   });
 
-  document.querySelectorAll('div, section, figure, article').forEach((el) => {
+  document.querySelectorAll('div, section, figure, article, a, span, li, header, main, button').forEach((el) => {
     const rect = el.getBoundingClientRect();
-    if (rect.width >= 100 && rect.height >= 100) {
+    if (rect.width >= 64 && rect.height >= 64) {
       const bg = window.getComputedStyle(el).backgroundImage || '';
-      if (bg.includes('url(') && !bg.includes('.svg') && !bg.includes('data:image/svg')) {
-        realRasterPhotos += 1;
+      const match = bg.match(/url\\(["']?([^"')]+)["']?\\)/i);
+      if (match) {
+        const url = match[1].toLowerCase();
+        if (
+          !url.startsWith('#') &&
+          !url.includes('.svg') &&
+          !url.startsWith('data:image/svg') &&
+          !url.startsWith('data:image/gif')
+        ) {
+          realRasterPhotos += 1;
+        }
       }
     }
   });
@@ -316,6 +339,7 @@ MEASURE_JS = """
 
   return {
     realRasterPhotos,
+    brokenImages,
     svgIllustrations,
     hasGoodTypography: maxHeadingSize >= bodyFontSize * 1.35,
     hasNav,
@@ -330,6 +354,202 @@ MEASURE_JS = """
   };
 }
 """
+
+
+async def prepare_lazy_images(page) -> None:
+    """Scroll bertahap agar gambar lazy-load / below-the-fold sempat dimuat sebelum audit DOM."""
+    try:
+        scroll_height = await page.evaluate("() => document.documentElement.scrollHeight || 0")
+        if scroll_height > 768:
+            for frac in (0.35, 0.7, 1.0):
+                await page.evaluate(f"() => window.scrollTo(0, {int(scroll_height * frac)})")
+                await page.wait_for_timeout(250)
+        await page.evaluate(
+            """() => Promise.all(
+                Array.from(document.images)
+                  .filter((img) => !img.complete)
+                  .map((img) => new Promise((res) => {
+                    const timer = setTimeout(res, 2000);
+                    img.addEventListener('load', () => { clearTimeout(timer); res(); }, { once: true });
+                    img.addEventListener('error', () => { clearTimeout(timer); res(); }, { once: true });
+                  }))
+            )"""
+        )
+        await page.evaluate("() => window.scrollTo(0, 0)")
+        await page.wait_for_timeout(150)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+async def discover_and_crawl_routes(page, base_url: str, base_metrics: dict, base_body: str) -> tuple[dict, str, list[str]]:
+    """Auto-Discovery: kunjungi maks 3 rute internal / tab utama untuk menemukan foto & fitur katalog."""
+    merged = dict(base_metrics)
+    best_body = base_body
+    discovered: list[str] = []
+    parsed_base = urlparse(base_url)
+    origin = f"{parsed_base.scheme}://{parsed_base.netloc}"
+
+    try:
+        candidates: list[str] = await page.evaluate(
+            """(origin) => {
+              const skip = /\\/(admin|login|masuk|signin|sign-in|register|daftar|signup|sign-up|logout|api)(\\/|$)/i;
+              const staticExt = /\\.(jpg|jpeg|png|webp|avif|svg|gif|css|js|pdf|zip)$/i;
+              const priority = /(menu|katalog|produk|product|shop|catalog|store|item|tentang|promo)/i;
+              const seen = new Set();
+              const scored = [];
+              document.querySelectorAll('a[href]').forEach((a) => {
+                const raw = a.getAttribute('href') || '';
+                if (!raw || raw.startsWith('#') || raw.startsWith('mailto:') || raw.startsWith('tel:')) return;
+                try {
+                  const u = new URL(raw, origin);
+                  if (u.origin !== origin) return;
+                  const p = u.pathname.replace(/\\/+$/, '') || '/';
+                  if (p === '/' || skip.test(p) || staticExt.test(p) || seen.has(p)) return;
+                  seen.add(p);
+                  const txt = (a.innerText || '').trim();
+                  const score = priority.test(p) || priority.test(txt) ? 0 : 1;
+                  scored.push({ url: u.origin + p, path: p, score });
+                } catch {}
+              });
+              scored.sort((a, b) => a.score - b.score);
+              return scored.slice(0, 3).map((x) => x.url);
+            }""",
+            origin,
+        )
+
+        for route_url in candidates:
+            try:
+                await page.goto(route_url, wait_until="domcontentloaded", timeout=6000)
+                await page.wait_for_timeout(450)
+                await prepare_lazy_images(page)
+                m = await page.evaluate(MEASURE_JS)
+                txt = await page.evaluate("() => document.body.innerText.trim()")
+                discovered.append(urlparse(route_url).path or "/")
+                for key in (
+                    "realRasterPhotos",
+                    "interactiveCount",
+                    "inputCount",
+                    "polishedCards",
+                ):
+                    merged[key] = max(merged.get(key, 0), m.get(key, 0))
+                merged["brokenImages"] = max(merged.get("brokenImages", 0), m.get("brokenImages", 0))
+                merged["hasNav"] = bool(merged.get("hasNav") or m.get("hasNav"))
+                merged["hasFooter"] = bool(merged.get("hasFooter") or m.get("hasFooter"))
+                merged["hasSearchOrFilter"] = bool(
+                    merged.get("hasSearchOrFilter") or m.get("hasSearchOrFilter")
+                )
+                if len(txt) > len(best_body):
+                    best_body = txt
+            except Exception:  # noqa: BLE001
+                continue
+
+        if not candidates:
+            clicked = await page.evaluate(
+                """() => {
+                  const rx = /(menu|katalog|produk|product|shop|catalog)/i;
+                  const btns = Array.from(document.querySelectorAll('nav button, header button, [role="tab"]'));
+                  const hit = btns.find((b) => rx.test((b.innerText || '').trim()));
+                  if (hit) { hit.click(); return (hit.innerText || '').trim().slice(0, 24); }
+                  return null;
+                }"""
+            )
+            if clicked:
+                await page.wait_for_timeout(450)
+                await prepare_lazy_images(page)
+                m = await page.evaluate(MEASURE_JS)
+                discovered.append(f"tab:{clicked}")
+                merged["realRasterPhotos"] = max(
+                    merged.get("realRasterPhotos", 0), m.get("realRasterPhotos", 0)
+                )
+                merged["brokenImages"] = max(merged.get("brokenImages", 0), m.get("brokenImages", 0))
+
+        if discovered and page.url != base_url:
+            await page.goto(base_url, wait_until="domcontentloaded", timeout=6000)
+            await page.wait_for_timeout(300)
+    except Exception:  # noqa: BLE001
+        pass
+
+    return merged, best_body, discovered
+
+
+async def run_auth_form_probes(page, base_url: str) -> dict:
+    """Test Login & Test Daftar: cari form login/register lalu uji validasi dasar dengan aman."""
+    parsed = urlparse(base_url)
+    origin = f"{parsed.scheme}://{parsed.netloc}"
+    login_test = "not_found"
+    register_test = "not_found"
+
+    async def _open_auth_target(paths: tuple[str, ...], btn_rx: str) -> bool:
+        # Cek di halaman saat ini dulu atau klik link/tombol yang cocok
+        try:
+            await page.goto(base_url, wait_until="domcontentloaded", timeout=5000)
+            await page.wait_for_timeout(300)
+            clicked = await page.evaluate(
+                """(rxStr) => {
+                  const rx = new RegExp(rxStr, 'i');
+                  const els = Array.from(document.querySelectorAll('a, button'));
+                  const target = els.find((el) => rx.test((el.innerText || el.getAttribute('aria-label') || '').trim()));
+                  if (target) { target.click(); return true; }
+                  return false;
+                }""",
+                btn_rx,
+            )
+            if clicked:
+                await page.wait_for_timeout(450)
+                if await page.locator('input[type="password"]:visible').count() > 0:
+                    return True
+        except Exception:  # noqa: BLE001
+            pass
+        for p in paths:
+            try:
+                resp = await page.goto(origin + p, wait_until="domcontentloaded", timeout=4500)
+                if resp and resp.status < 400:
+                    await page.wait_for_timeout(350)
+                    if await page.locator('input[type="password"]:visible').count() > 0:
+                        return True
+            except Exception:  # noqa: BLE001
+                continue
+        return False
+
+    # 1. Test Login
+    if await _open_auth_target(("/login", "/masuk", "/signin"), r"^(masuk|login|sign\s*in)$"):
+        try:
+            user_inp = page.locator('input[type="email"]:visible, input[type="text"]:visible').first
+            pw_inp = page.locator('input[type="password"]:visible').first
+            if await pw_inp.count() > 0:
+                if await user_inp.count() > 0:
+                    await user_inp.fill("qa-probe@example.com", timeout=1500)
+                await pw_inp.fill("WrongPass123!", timeout=1500)
+                submit_btn = page.locator('button[type="submit"]:visible, form button:visible').first
+                if await submit_btn.count() > 0:
+                    await submit_btn.click(timeout=1500)
+                else:
+                    await pw_inp.press("Enter")
+                await page.wait_for_timeout(600)
+                final_url = page.url.lower()
+                bypassed = any(tok in final_url for tok in ("/admin", "/dashboard"))
+                login_test = "failed" if bypassed else "passed"
+        except Exception:  # noqa: BLE001
+            login_test = "failed"
+
+    # 2. Test Daftar / Register
+    if await _open_auth_target(("/register", "/daftar", "/signup"), r"^(daftar|register|sign\s*up|buat\s*akun)$"):
+        try:
+            pw_inp = page.locator('input[type="password"]:visible').first
+            email_inp = page.locator('input[type="email"]:visible, input[name*="email" i]:visible').first
+            if await pw_inp.count() > 0:
+                if await email_inp.count() > 0:
+                    await email_inp.fill("invalid-email", timeout=1500)
+                await pw_inp.fill("123", timeout=1500)
+                submit_btn = page.locator('button[type="submit"]:visible, form button:visible').first
+                if await submit_btn.count() > 0:
+                    await submit_btn.click(timeout=1500)
+                await page.wait_for_timeout(400)
+                register_test = "passed"
+        except Exception:  # noqa: BLE001
+            register_test = "failed"
+
+    return {"loginTest": login_test, "registerTest": register_test}
 
 
 class AuditRequest(BaseModel):
@@ -373,6 +593,10 @@ async def audit_url(url: str) -> dict:
         "searchWorks": None,
         "negativeQtyRejected": None,
         "stockGuardDetected": None,
+        "discoveredRoutes": [],
+        "brokenImages": None,
+        "loginTest": None,
+        "registerTest": None,
         "screenshotDataUrl": None,
         "locked": None,
         "platformError": None,
@@ -384,7 +608,23 @@ async def audit_url(url: str) -> dict:
         context = await browser.new_context(ignore_https_errors=True)
         page = await context.new_page()
         console_errors: list[str] = []
+        network_raster_urls: set[str] = set()
         page.on("pageerror", lambda err: console_errors.append(str(err)))
+
+        def _on_response(resp):
+            try:
+                if resp.status == 200:
+                    ctype = (resp.headers.get("content-type") or "").lower()
+                    if ctype.startswith("image/") and not any(
+                        skip in ctype for skip in ("svg", "gif", "icon")
+                    ):
+                        clen = resp.headers.get("content-length")
+                        if clen is None or int(clen) >= 2048:
+                            network_raster_urls.add(resp.url)
+            except Exception:  # noqa: BLE001
+                pass
+
+        page.on("response", _on_response)
 
         try:
             await page.set_viewport_size({"width": 1366, "height": 768})
@@ -430,12 +670,28 @@ async def audit_url(url: str) -> dict:
                 result["error"] = "Deployment tidak aktif atau error di hosting"
                 return result
 
+            await prepare_lazy_images(page)
             metrics = await page.evaluate(MEASURE_JS)
-            text_lower = body_text.lower()
+            base_page_url = page.url
+
+            try:
+                shot_bytes = await page.screenshot(type="jpeg", quality=50, full_page=False)
+                result["screenshotDataUrl"] = "data:image/jpeg;base64," + base64.b64encode(
+                    shot_bytes
+                ).decode("ascii")
+            except Exception:  # noqa: BLE001
+                pass
+
+            metrics, best_body, discovered_routes = await discover_and_crawl_routes(
+                page, base_page_url, metrics, body_text
+            )
+            text_lower = best_body.lower()
 
             result.update(
                 {
-                    "rasterImages": metrics["realRasterPhotos"],
+                    "rasterImages": max(metrics["realRasterPhotos"], len(network_raster_urls)),
+                    "brokenImages": metrics.get("brokenImages", 0),
+                    "discoveredRoutes": discovered_routes,
                     "svgImages": metrics["svgIllustrations"],
                     "interactiveCount": metrics["interactiveCount"],
                     "inputCount": metrics["inputCount"],
@@ -445,7 +701,7 @@ async def audit_url(url: str) -> dict:
                     "hasSearch": metrics["hasSearchOrFilter"],
                     "hasViewportMeta": metrics["hasViewportMeta"],
                     "typography": "Baik" if metrics["hasGoodTypography"] else "Datar",
-                    "textLength": len(body_text),
+                    "textLength": len(best_body),
                     "mvpSignals": sum(1 for kw in MVP_KEYWORDS if kw in text_lower),
                     "priceMentions": text_lower.count("rp"),
                     "hasDummyText": any(pattern in text_lower for pattern in DUMMY_PATTERNS),
@@ -453,14 +709,6 @@ async def audit_url(url: str) -> dict:
                     "platformError": False,
                 }
             )
-
-            try:
-                shot_bytes = await page.screenshot(type="jpeg", quality=50, full_page=False)
-                result["screenshotDataUrl"] = "data:image/jpeg;base64," + base64.b64encode(
-                    shot_bytes
-                ).decode("ascii")
-            except Exception:  # noqa: BLE001
-                pass
 
             await page.set_viewport_size({"width": 375, "height": 812})
             await page.wait_for_timeout(400)
@@ -475,10 +723,10 @@ async def audit_url(url: str) -> dict:
             except Exception:  # noqa: BLE001
                 pass
 
-            result["httpsEnabled"] = page.url.startswith("https://")
+            result["httpsEnabled"] = base_page_url.startswith("https://")
             try:
                 html = await page.content()
-                probes = await run_security_probes(context, page, page.url, html, title or None)
+                probes = await run_security_probes(context, page, base_page_url, html, title or None)
                 result.update(probes)
             except Exception:  # noqa: BLE001
                 # Audit inti tetap valid walau probe keamanan gagal.
@@ -487,6 +735,12 @@ async def audit_url(url: str) -> dict:
                 result.setdefault("exposedSecrets", [])
                 result.setdefault("xssProbes", 0)
                 result.setdefault("pathsProbed", 0)
+
+            try:
+                auth_probes = await run_auth_form_probes(page, base_page_url)
+                result.update(auth_probes)
+            except Exception:  # noqa: BLE001
+                pass
 
             result["consoleErrors"] = len(console_errors)
             return result
