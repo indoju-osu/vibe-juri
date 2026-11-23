@@ -212,8 +212,8 @@ export default function LeaderboardPage() {
           </h1>
           <p className="mt-0.5 text-[11px] text-slate-500">
             Peringkat memakai skor akhir: nilai juri bila sudah disimpan, selain itu{" "}
-            <span className="text-slate-300">Produk/UX + Security otomatis</span> (Personal 0,
-            ditambahkan saat juri mengisi). Tie-breaker: Produk/UX → Security → Personal → otomatis
+            <span className="text-slate-300">Produk/UX + Security otomatis</span> (Creativity 0,
+            ditambahkan saat juri mengisi). Tie-breaker: Produk/UX → Security → Creativity → otomatis
             → URL.
           </p>
         </div>
@@ -398,7 +398,7 @@ export default function LeaderboardPage() {
                   <span className="block font-mono text-[9px] normal-case text-slate-500">/25</span>
                 </th>
                 <th scope="col" className="w-16 px-2 py-2 text-center font-semibold">
-                  Personal
+                  Creativity
                   <span className="block font-mono text-[9px] normal-case text-slate-500">/15</span>
                 </th>
                 <th scope="col" className="w-20 px-2 py-2 text-center font-semibold text-rose-300">

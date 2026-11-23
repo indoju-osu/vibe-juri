@@ -232,7 +232,7 @@ export function BulkAutoAudit({ entries, onAudit }: BulkAutoAuditProps) {
             (headers/HTTPS, XSS, data sensitif, <span className="font-mono">/admin</span> &amp;
             <span className="font-mono"> /api/*</span>).{" "}
             <span className="text-slate-300">Peringkat sementara = Produk/UX + Security</span>{" "}
-            (Personal 0). Nilai juri menggantikannya setelah disimpan.
+            (Creativity 0). Nilai juri menggantikannya setelah disimpan.
           </p>
         )}
 

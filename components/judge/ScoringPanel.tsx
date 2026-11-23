@@ -58,7 +58,7 @@ const TABS: {
   },
   {
     id: "personal",
-    label: "Personal",
+    label: "Creativity",
     max: 15,
     icon: IconSparkles,
     activeClass: "border-amber-500/50 bg-amber-500/10 text-amber-200",
@@ -253,7 +253,7 @@ export function ScoringPanel({
               className="rounded-md border border-sky-500/30 bg-sky-500/5 px-1.5 py-1"
               title={
                 autoRubric
-                  ? `Produk/UX ${autoRubric.product}/60 + Security ${autoRubric.security}/25 · Personal 0`
+                  ? `Produk/UX ${autoRubric.product}/60 + Security ${autoRubric.security}/25 · Creativity 0`
                   : "Belum diaudit otomatis"
               }
             >
@@ -316,11 +316,11 @@ export function ScoringPanel({
                 tip: "Aspek Security OWASP (maks 25): XSS (5) + Auth (5) + Data Sensitif (5) + Headers (5) + Logika Bisnis (5).",
               },
               {
-                label: "Personal",
+                label: "Creativity",
                 value: personal,
                 max: 15,
                 tone: "text-amber-300",
-                tip: "Apresiasi Personal Juri / X-Factor (maks 15, default 8): orisinalitas ide, kreativitas, dan ketelitian eksekusi.",
+                tip: "Creativity / X-Factor (maks 15, default 8): orisinalitas ide, kreativitas, dan ketelitian eksekusi.",
               },
             ].map((item) => (
               <div

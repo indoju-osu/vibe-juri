@@ -108,8 +108,8 @@ export const SECURITY_FIELDS: ScoreFieldConfig[] = [
 export const PERSONAL_FIELDS: ScoreFieldConfig[] = [
   {
     field: "personal",
-    label: "5. Apresiasi Personal Juri / X-Factor",
-    short: "Personal",
+    label: "5. Creativity / X-Factor",
+    short: "Creativity",
     max: 15,
     pillar: "personal",
     helper:

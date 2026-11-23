@@ -120,7 +120,7 @@ export function AppFooter() {
           </span>
         </p>
         <p className="font-mono text-[10px] uppercase tracking-wider text-slate-600">
-          Produk/UX 60 · Security 25 · Personal 15
+          Produk/UX 60 · Security 25 · Creativity 15
         </p>
       </div>
     </footer>

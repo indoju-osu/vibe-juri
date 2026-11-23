@@ -42,7 +42,7 @@ const PILLARS = [
     detail: "XSS · Auth · Data · Headers · Logika bisnis",
   },
   {
-    label: "Penilaian Personal Juri",
+    label: "Creativity",
     max: 15,
     accent: "bg-amber-500",
     text: "text-amber-300",

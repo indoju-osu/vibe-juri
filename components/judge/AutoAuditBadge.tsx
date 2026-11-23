@@ -155,7 +155,7 @@ export function AutoAuditBadge({
                 ? "border-amber-500/40 bg-amber-500/10 text-amber-300"
                 : "border-sky-500/40 bg-sky-500/10 text-sky-300"
             }`}
-            title="Peringkat sementara = Produk/UX + Security otomatis (Personal 0)"
+            title="Peringkat sementara = Produk/UX + Security otomatis (Creativity 0)"
           >
             {autoFailed ? "Audit gagal" : `${rubric?.total ?? 0}/85`}
           </span>
