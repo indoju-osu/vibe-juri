@@ -36,8 +36,9 @@ app.add_middleware(
 )
 
 MVP_KEYWORDS = [
-    "rp", "stok", "keranjang", "beli", "pesan", "detail", "promo",
-    "diskon", "harga", "kategori", "daftar", "masuk", "kontak",
+    "rp", "idr", "stok", "keranjang", "cart", "checkout", "beli", "pesan", "order",
+    "detail", "promo", "diskon", "harga", "kategori", "katalog", "catalog",
+    "produk", "product", "koleksi", "daftar", "masuk", "kontak",
 ]
 DUMMY_PATTERNS = ["apalah", "data contoh", "lorem ipsum", "testing", "dummy", "qwerty", "asdf"]
 

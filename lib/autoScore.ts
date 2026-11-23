@@ -17,15 +17,24 @@ import type { AuditResult, AutoRubric, AutoScore, AutoSecurity, ScoreDetail } fr
 
 const MVP_KEYWORDS = [
   "rp",
+  "idr",
   "stok",
   "keranjang",
+  "cart",
+  "checkout",
   "beli",
   "pesan",
+  "order",
   "detail",
   "promo",
   "diskon",
   "harga",
   "kategori",
+  "katalog",
+  "catalog",
+  "produk",
+  "product",
+  "koleksi",
   "daftar",
   "masuk",
   "kontak",
@@ -124,10 +133,10 @@ export function autoScoreFromAudit(audit: AuditResult): AutoScore {
 
   /* 1. Kesiapan Produk & MVP (35) ------------------------------------------------ */
   let photoScore: number;
-  if (realPhotos >= 10) photoScore = 15;
-  else if (realPhotos >= 5) photoScore = 12;
-  else if (realPhotos >= 2) photoScore = 8;
-  else if (realPhotos >= 1) photoScore = 5;
+  if (realPhotos >= 8) photoScore = 15;
+  else if (realPhotos >= 5) photoScore = 13;
+  else if (realPhotos >= 2) photoScore = 9;
+  else if (realPhotos >= 1) photoScore = 6;
   else if (svgIllustrations >= 4) photoScore = 3;
   else photoScore = 0;
 
@@ -136,20 +145,20 @@ export function autoScoreFromAudit(audit: AuditResult): AutoScore {
   let transactionScore = 0;
   if (priceMentions === null && mvpSignals === null) {
     transactionScore = 0;
-  } else if (num(priceMentions) >= 3 || num(mvpSignals) >= 6) {
+  } else if (num(priceMentions) >= 2 || num(mvpSignals) >= 5) {
     transactionScore = 12;
-  } else if (num(priceMentions) >= 1 || num(mvpSignals) >= 4) {
-    transactionScore = 8;
-  } else if (num(mvpSignals) >= 2) {
-    transactionScore = 4;
+  } else if (num(priceMentions) >= 1 || num(mvpSignals) >= 3) {
+    transactionScore = 9;
+  } else if (num(mvpSignals) >= 1) {
+    transactionScore = 5;
   }
 
   const textLength = audit.textLength;
   let textScore: number;
   if (textLength === null) textScore = 3;
-  else if (textLength >= 3000) textScore = 8;
-  else if (textLength >= 1500) textScore = 6;
-  else if (textLength >= 500) textScore = 3;
+  else if (textLength >= 1800) textScore = 8;
+  else if (textLength >= 900) textScore = 6;
+  else if (textLength >= 400) textScore = 4;
   else textScore = 1;
   if (dummy) textScore = Math.max(1, textScore - 4);
 
