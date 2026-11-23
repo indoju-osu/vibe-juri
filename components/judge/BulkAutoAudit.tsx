@@ -13,9 +13,11 @@ import { toast } from "@/lib/toast";
 import type { AuditResult, JudgeEntry } from "@/types";
 
 const ENABLED_KEY = "vibe-juri.autoaudit.v1";
+const AUTO_STARTED_SESSION_KEY = "vibe-juri.bulk-auto-started.v1";
 const CONCURRENCY = 1;
 
 interface BulkAutoAuditProps {
+  sessionKey: string;
   entries: JudgeEntry[];
   onAudit: (entryId: string, audit: AuditResult) => void;
 }
@@ -28,7 +30,7 @@ function hostOf(url: string): string {
   }
 }
 
-export function BulkAutoAudit({ entries, onAudit }: BulkAutoAuditProps) {
+export function BulkAutoAudit({ sessionKey, entries, onAudit }: BulkAutoAuditProps) {
   const [enabled, setEnabled] = useState(true);
   const [ready, setReady] = useState(false);
   const [running, setRunning] = useState(false);
@@ -140,12 +142,28 @@ export function BulkAutoAudit({ entries, onAudit }: BulkAutoAuditProps) {
     [onAudit],
   );
 
-  // Jalankan otomatis sekali per sesi: nilai sementara langsung terbentuk.
+  // Hentikan worker bila komponen unmount (misal pindah ke tab Klasemen).
+  useEffect(() => {
+    return () => {
+      cancelRef.current = true;
+    };
+  }, []);
+
+  // Jalankan otomatis hanya sekali saat sesi baru dibuat (tidak mengulang saat pindah tab).
   useEffect(() => {
     if (!ready || !enabled || startedRef.current || pending.length === 0) return;
+    try {
+      if (window.localStorage.getItem(AUTO_STARTED_SESSION_KEY) === sessionKey) {
+        startedRef.current = true;
+        return;
+      }
+      window.localStorage.setItem(AUTO_STARTED_SESSION_KEY, sessionKey);
+    } catch {
+      // ignore storage failures
+    }
     startedRef.current = true;
     void run(pending.map((entry) => entry.id));
-  }, [ready, enabled, pending, run]);
+  }, [ready, enabled, pending, run, sessionKey]);
 
   const toggleEnabled = () => {
     const next = !enabled;
@@ -232,7 +250,7 @@ export function BulkAutoAudit({ entries, onAudit }: BulkAutoAuditProps) {
             (headers/HTTPS, XSS, data sensitif, <span className="font-mono">/admin</span> &amp;
             <span className="font-mono"> /api/*</span>).{" "}
             <span className="text-slate-300">Peringkat sementara = Produk/UX + Security</span>{" "}
-            (Creativity 0). Nilai juri menggantikannya setelah disimpan.
+            (+ Creativity default 8). Nilai juri menggantikannya setelah disimpan.
           </p>
         )}
 
@@ -277,7 +295,7 @@ export function BulkAutoAudit({ entries, onAudit }: BulkAutoAuditProps) {
               onChange={toggleEnabled}
               className="h-3 w-3 rounded border-slate-600 bg-slate-900 text-sky-500 focus:ring-sky-500/40"
             />
-            Otomatis saat sesi dibuka
+            Otomatis saat sesi baru
           </label>
         </div>
       </div>

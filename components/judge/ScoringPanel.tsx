@@ -253,7 +253,7 @@ export function ScoringPanel({
               className="rounded-md border border-sky-500/30 bg-sky-500/5 px-1.5 py-1"
               title={
                 autoRubric
-                  ? `Produk/UX ${autoRubric.product}/60 + Security ${autoRubric.security}/25 · Creativity 0`
+                  ? `Produk/UX ${autoRubric.product}/60 + Security ${autoRubric.security}/25 (tanpa Creativity)`
                   : "Belum diaudit otomatis"
               }
             >

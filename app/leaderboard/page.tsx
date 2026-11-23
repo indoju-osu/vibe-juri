@@ -212,9 +212,9 @@ export default function LeaderboardPage() {
           </h1>
           <p className="mt-0.5 text-[11px] text-slate-500">
             Peringkat memakai skor akhir: nilai juri bila sudah disimpan, selain itu{" "}
-            <span className="text-slate-300">Produk/UX + Security otomatis</span> (Creativity 0,
-            ditambahkan saat juri mengisi). Tie-breaker: Produk/UX → Security → Creativity → otomatis
-            → URL.
+            <span className="text-slate-300">Produk/UX + Security otomatis</span> (ditambah
+            Creativity default 8 atau nilai saat ini). Tie-breaker: Produk/UX → Security →
+            Creativity → otomatis → URL.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">

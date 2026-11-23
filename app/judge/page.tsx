@@ -226,7 +226,11 @@ export default function JudgePage() {
       </div>
 
       <div className="mt-3">
-        <BulkAutoAudit entries={session.entries} onAudit={handleAuditForEntry} />
+        <BulkAutoAudit
+          sessionKey={session.createdAt}
+          entries={session.entries}
+          onAudit={handleAuditForEntry}
+        />
       </div>
 
       <div className="mt-3 flex flex-col gap-3 lg:grid lg:grid-cols-[minmax(0,1.15fr)_minmax(420px,480px)] lg:items-start lg:gap-4">

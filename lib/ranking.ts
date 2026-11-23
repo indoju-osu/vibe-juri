@@ -38,8 +38,8 @@ export interface EffectiveScore {
 
 /**
  * Komponen efektif untuk klasemen:
- * - sudah dinilai juri → rubrik juri (Product 60 + Security 25 + Personal 15)
- * - belum dinilai → otomatis (Product 60 + Security 25, Personal 0)
+ * - sudah dinilai juri → rubrik juri (Product 60 + Security 25 + Creativity 15)
+ * - belum dinilai → otomatis (Product 60 + Security 25) + Creativity (default 8 / nilai juri)
  */
 export function entryEffectiveScore(entry: JudgeEntry): EffectiveScore {
   if (entry.score.judged) {
@@ -56,12 +56,18 @@ export function entryEffectiveScore(entry: JudgeEntry): EffectiveScore {
     return {
       product: rubric.product,
       security: rubric.security,
-      personal: rubric.personal,
-      total: round1(rubric.total),
+      personal: entry.score.personal,
+      total: round1(rubric.product + rubric.security + entry.score.personal),
       source: "auto",
     };
   }
-  return { product: 0, security: 0, personal: 0, total: 0, source: "none" };
+  return {
+    product: 0,
+    security: 0,
+    personal: entry.score.personal,
+    total: round1(entry.score.personal),
+    source: "none",
+  };
 }
 
 /** Skor otomatis gabungan Produk/UX + Security (0–85, Personal 0) — peringkat sementara. */
@@ -151,7 +157,7 @@ export function entryBreakdown(entry: JudgeEntry) {
     /* Rubrik juri */
     product: round1(productSubtotal(entry.score)),
     security: round1(securitySubtotal(entry.score)),
-    personal: entry.score.personal,
+    personal: effective.personal,
     judge: entryJudgeTotal(entry),
 
     /* Nilai efektif (dipakai sebagai peringkat) */
