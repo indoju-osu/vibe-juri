@@ -185,14 +185,14 @@ export function AutoAuditBadge({
               </span>
             </div>
 
-            {auto ? (
+            {auto && rubric ? (
               <div className="rounded-lg border border-sky-500/35 bg-slate-900/60 p-2.5 dark:bg-gradient-to-br dark:from-sky-950/40 dark:via-slate-900/60 dark:to-slate-950/80">
                 <div className="flex items-end justify-between gap-2">
                   <div>
                     <p className="label-mono text-sky-300">Produk &amp; UX otomatis</p>
                     <p className="font-mono text-2xl font-bold leading-none text-slate-50">
-                      {auto.total}
-                      <span className="ml-1 text-[10px] font-medium text-slate-500">/100</span>
+                      {rubric.product}
+                      <span className="ml-1 text-[10px] font-medium text-slate-500">/60</span>
                     </p>
                   </div>
                   {autoFailed ? (
@@ -210,31 +210,25 @@ export function AutoAuditBadge({
                   )}
                 </div>
 
-                <dl className="mt-1.5 grid grid-cols-4 gap-1">
+                <dl className="mt-1.5 grid grid-cols-3 gap-1">
                   {[
                     {
                       label: "MVP",
-                      value: auto.mvp,
-                      max: 35,
-                      tip: "Kesiapan Produk & MVP (maks 35): foto produk asli, sinyal transaksi/harga, dan kelengkapan konten.",
+                      value: rubric.mvp,
+                      max: 25,
+                      tip: "Kesiapan Produk & MVP (maks 25): foto produk asli, sinyal transaksi/harga, dan kelengkapan konten.",
                     },
                     {
                       label: "UI/UX",
-                      value: auto.uiux,
-                      max: 30,
-                      tip: "Kualitas UI/UX & Estetika (maks 30): tipografi, struktur nav/footer/search, responsif mobile, dan polish kartu.",
-                    },
-                    {
-                      label: "Fitur",
-                      value: auto.features,
+                      value: rubric.uiux,
                       max: 20,
-                      tip: "Fitur & Interaktivitas (maks 20): jumlah tombol/elemen interaktif dan input form/pencarian.",
+                      tip: "Kualitas UI/UX & Estetika (maks 20): tipografi, struktur nav/footer/search, responsif mobile, dan polish kartu.",
                     },
                     {
-                      label: "Perf",
-                      value: auto.performance,
+                      label: "Fitur & Perf",
+                      value: rubric.features,
                       max: 15,
-                      tip: "Performa & Stabilitas (maks 15): bebas error JS console dan kecepatan muat halaman.",
+                      tip: "Fitur, Interaktivitas & Performa (maks 15): elemen interaktif, input form/pencarian, bebas JS error, dan waktu muat.",
                     },
                   ].map((item) => (
                     <div
