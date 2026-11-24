@@ -142,55 +142,59 @@ export function prepareSessionAdditions(
   };
 }
 
+export function parseSessionPayload(raw: unknown): SessionState | null {
+  if (!raw || typeof raw !== "object") return null;
+  const parsed = raw as Record<string, unknown>;
+
+  const entries = Array.isArray(parsed.entries)
+    ? parsed.entries.map(normalizeEntry).filter((entry): entry is JudgeEntry => entry !== null)
+    : [];
+
+  if (entries.length === 0) return null;
+
+  const ignored: IgnoredEntry[] = Array.isArray(parsed.ignored)
+    ? parsed.ignored
+        .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
+        .map((item) => ({
+          id: typeof item.id === "string" ? item.id : makeId("ignored"),
+          url: typeof item.url === "string" ? item.url : String(item.url ?? ""),
+          category:
+            item.category === "Duplikat (Diabaikan)"
+              ? "Duplikat (Diabaikan)"
+              : "Tidak Valid / Repo Git",
+          detail: typeof item.detail === "string" ? item.detail : "",
+        }))
+    : [];
+
+  const active = Number(parsed.activeIndex);
+  const activeIndex = Number.isFinite(active)
+    ? Math.max(0, Math.min(entries.length - 1, Math.floor(active)))
+    : 0;
+
+  return {
+    version: 1,
+    createdAt:
+      typeof parsed.createdAt === "string" ? parsed.createdAt : new Date().toISOString(),
+    updatedAt:
+      typeof parsed.updatedAt === "string" ? parsed.updatedAt : new Date().toISOString(),
+    activeIndex,
+    entries,
+    ignored,
+  };
+}
+
 export function loadSession(): SessionState | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    if (!parsed || typeof parsed !== "object") return null;
-
-    const entries = Array.isArray(parsed.entries)
-      ? parsed.entries.map(normalizeEntry).filter((entry): entry is JudgeEntry => entry !== null)
-      : [];
-
-    if (entries.length === 0) return null;
-
-    const ignored: IgnoredEntry[] = Array.isArray(parsed.ignored)
-      ? parsed.ignored
-          .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
-          .map((item) => ({
-            id: typeof item.id === "string" ? item.id : makeId("ignored"),
-            url: typeof item.url === "string" ? item.url : String(item.url ?? ""),
-            category:
-              item.category === "Duplikat (Diabaikan)"
-                ? "Duplikat (Diabaikan)"
-                : "Tidak Valid / Repo Git",
-            detail: typeof item.detail === "string" ? item.detail : "",
-          }))
-      : [];
-
-    const active = Number(parsed.activeIndex);
-    const activeIndex = Number.isFinite(active)
-      ? Math.max(0, Math.min(entries.length - 1, Math.floor(active)))
-      : 0;
-
-    return {
-      version: 1,
-      createdAt:
-        typeof parsed.createdAt === "string" ? parsed.createdAt : new Date().toISOString(),
-      updatedAt:
-        typeof parsed.updatedAt === "string" ? parsed.updatedAt : new Date().toISOString(),
-      activeIndex,
-      entries,
-      ignored,
-    };
+    return parseSessionPayload(JSON.parse(raw));
   } catch {
     return null;
   }
 }
 
-function stripScreenshotsForStorage(session: SessionState): SessionState {
+export function stripScreenshotsForStorage(session: SessionState): SessionState {
   return {
     ...session,
     entries: session.entries.map((entry) =>

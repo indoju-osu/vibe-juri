@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ResetSessionButton } from "@/components/layout/ResetSessionButton";
 import { WinnersPodiumModal } from "@/components/leaderboard/WinnersPodiumModal";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import {
   IconAlertTriangle,
   IconCheckCircle,
@@ -16,14 +17,21 @@ import {
   IconSearch,
   IconSparkles,
   IconTrophy,
+  IconUpload,
   IconX,
 } from "@/components/ui/icons";
 import { seedUntouchedScore } from "@/lib/autoScore";
 import { EXPORT_FILENAME, exportSessionToXlsx } from "@/lib/exporter";
+import {
+  exportLeaderboardSnapshot,
+  parseLeaderboardSnapshot,
+  type ParsedLeaderboardSnapshot,
+} from "@/lib/leaderboardSnapshot";
 import { entryBreakdown, sessionStats, sortEntries } from "@/lib/ranking";
 import { focusPreviewWindow, openPreviewWindow } from "@/lib/splitWindow";
 import { toast } from "@/lib/toast";
 import { useSession } from "@/lib/useSession";
+import { saveWinnersConfig } from "@/lib/winnersConfig";
 import type { JudgeEntry } from "@/types";
 
 type StatusFilter = "all" | "judged" | "pending";
@@ -45,12 +53,16 @@ function rankBadge(rank: number): string {
 
 export default function LeaderboardPage() {
   const router = useRouter();
-  const { session, loaded, update } = useSession();
+  const { session, loaded, update, replaceSession } = useSession();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<StatusFilter>("all");
   const [exporting, setExporting] = useState(false);
   const [popupBlocked, setPopupBlocked] = useState(false);
   const [podiumOpen, setPodiumOpen] = useState(false);
+  const [pendingImport, setPendingImport] = useState<
+    (ParsedLeaderboardSnapshot & { filename: string }) | null
+  >(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   const ranked = useMemo(
     () =>
@@ -158,6 +170,66 @@ export default function LeaderboardPage() {
     }
   };
 
+  const handleExportSnapshot = () => {
+    if (!session || session.entries.length === 0) {
+      toast("Tidak ada data klasemen untuk diekspor.", "warning");
+      return;
+    }
+    try {
+      const result = exportLeaderboardSnapshot(session);
+      toast(
+        `${result.filename} diunduh (${result.entriesCount} karya + pengaturan Panggung Juara).`,
+        "success",
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Gagal mengekspor klasemen";
+      toast(message, "error");
+    }
+  };
+
+  const applyImportedSnapshot = (snapshot: ParsedLeaderboardSnapshot, filename: string) => {
+    saveWinnersConfig(snapshot.winners);
+    replaceSession(snapshot.session);
+    toast(
+      `Klasemen "${filename}" dimuat: ${snapshot.session.entries.length} karya & pengaturan Panggung Juara diterapkan.`,
+      "success",
+    );
+  };
+
+  const triggerImportPicker = () => {
+    importInputRef.current?.click();
+  };
+
+  const handleImportFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const parsed = parseLeaderboardSnapshot(text);
+      if (session && session.entries.length > 0) {
+        setPendingImport({ ...parsed, filename: file.name });
+        return;
+      }
+      applyImportedSnapshot(parsed, file.name);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Gagal mengimpor file klasemen";
+      toast(message, "error");
+    }
+  };
+
+  const importFileInput = (
+    <input
+      ref={importInputRef}
+      type="file"
+      accept=".json,application/json"
+      onChange={handleImportFileChange}
+      className="hidden"
+      aria-label="Import file klasemen JSON"
+    />
+  );
+
   if (!loaded) {
     return (
       <main id="konten-utama" className="mx-auto w-full max-w-[1200px] flex-1 px-3 py-6 sm:px-5">
@@ -173,6 +245,7 @@ export default function LeaderboardPage() {
   if (!session || !stats) {
     return (
       <main id="konten-utama" className="mx-auto w-full max-w-[720px] flex-1 px-3 py-10 sm:px-5">
+        {importFileInput}
         <section className="card p-5 text-center" aria-labelledby="lb-empty-title">
           <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-300">
             <IconTrophy className="h-6 w-6" />
@@ -181,10 +254,14 @@ export default function LeaderboardPage() {
             Klasemen belum tersedia
           </h1>
           <p className="mx-auto mt-1.5 max-w-md text-xs leading-relaxed text-slate-400">
-            Import URL peserta untuk mengisi klasemen sementara otomatis. Nilai juri (default 0)
-            akan menggantikan nilai otomatis begitu disimpan.
+            Import URL peserta untuk mengisi klasemen sementara otomatis, atau muat file klasemen
+            (.json) yang sudah diekspor untuk menampilkan hasil &amp; panggung juara yang sama.
           </p>
-          <div className="mt-4 flex justify-center gap-2">
+          <div className="mt-4 flex flex-wrap justify-center gap-2">
+            <button type="button" className="btn-success" onClick={triggerImportPicker}>
+              <IconUpload className="h-4 w-4" />
+              Import Klasemen (.json)
+            </button>
             <Link href="/" className="btn-primary">
               <IconSparkles className="h-4 w-4" />
               Import URL Peserta
@@ -218,7 +295,26 @@ export default function LeaderboardPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
+          {importFileInput}
           <ResetSessionButton className="btn-ghost px-2 py-1.5 text-[11px]" label="Reset" />
+          <button
+            type="button"
+            className="btn-secondary px-2.5 py-1.5 text-[11px]"
+            onClick={triggerImportPicker}
+            title="Muat klasemen dan pengaturan panggung juara dari file .json"
+          >
+            <IconUpload className="h-3.5 w-3.5" />
+            Import Klasemen
+          </button>
+          <button
+            type="button"
+            className="btn-secondary px-2.5 py-1.5 text-[11px]"
+            onClick={handleExportSnapshot}
+            title="Simpan klasemen dan pengaturan panggung juara ke file .json agar bisa dibuka lagi kapan pun"
+          >
+            <IconDownload className="h-3.5 w-3.5" />
+            Export Klasemen
+          </button>
           <button
             type="button"
             className="btn border-amber-500/50 bg-amber-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-amber-400"
@@ -589,6 +685,25 @@ export default function LeaderboardPage() {
         open={podiumOpen}
         entries={ranked.map((item) => item.entry)}
         onClose={() => setPodiumOpen(false)}
+      />
+
+      <ConfirmDialog
+        open={Boolean(pendingImport)}
+        title="Ganti klasemen saat ini?"
+        description={
+          pendingImport
+            ? `File "${pendingImport.filename}" berisi ${pendingImport.session.entries.length} karya. Data klasemen dan pengaturan panggung juara saat ini akan digantikan.`
+            : undefined
+        }
+        confirmLabel="Ya, Terapkan"
+        cancelLabel="Batal"
+        onConfirm={() => {
+          if (pendingImport) {
+            applyImportedSnapshot(pendingImport, pendingImport.filename);
+            setPendingImport(null);
+          }
+        }}
+        onCancel={() => setPendingImport(null)}
       />
     </main>
   );

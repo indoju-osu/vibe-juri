@@ -17,31 +17,14 @@ import {
   playSpotlightClick,
 } from "@/lib/kahootAudio";
 import { entryFinalScore } from "@/lib/ranking";
+import {
+  DEFAULT_WINNERS_CONFIG,
+  loadWinnersConfig,
+  saveWinnersConfig,
+  type CustomCategory,
+  type WinnersConfig,
+} from "@/lib/winnersConfig";
 import type { JudgeEntry } from "@/types";
-
-const WINNERS_CONFIG_KEY = "vibe-juri.winners.v1";
-
-interface CustomCategory {
-  id: string;
-  name: string;
-  entryId: string;
-}
-
-interface WinnersConfig {
-  title: string;
-  topCount: 3 | 5;
-  highlightRank: 1 | 2 | 3;
-  overrides: Record<number, string>;
-  customCategories: CustomCategory[];
-}
-
-const DEFAULT_CONFIG: WinnersConfig = {
-  title: "Pengumuman Juara Vibe Coding",
-  topCount: 5,
-  highlightRank: 1,
-  overrides: {},
-  customCategories: [],
-};
 
 type StepKind =
   | { type: "idle" }
@@ -55,24 +38,6 @@ function hostOf(url: string): string {
     return new URL(url).hostname;
   } catch {
     return url;
-  }
-}
-
-function loadConfig(): WinnersConfig {
-  if (typeof window === "undefined") return DEFAULT_CONFIG;
-  try {
-    const raw = window.localStorage.getItem(WINNERS_CONFIG_KEY);
-    if (!raw) return DEFAULT_CONFIG;
-    const parsed = JSON.parse(raw) as Partial<WinnersConfig>;
-    return {
-      title: typeof parsed.title === "string" && parsed.title.trim() ? parsed.title : DEFAULT_CONFIG.title,
-      topCount: parsed.topCount === 3 ? 3 : 5,
-      highlightRank: parsed.highlightRank === 2 || parsed.highlightRank === 3 ? parsed.highlightRank : 1,
-      overrides: parsed.overrides && typeof parsed.overrides === "object" ? parsed.overrides : {},
-      customCategories: Array.isArray(parsed.customCategories) ? parsed.customCategories : [],
-    };
-  } catch {
-    return DEFAULT_CONFIG;
   }
 }
 
@@ -207,7 +172,7 @@ export function WinnersPodiumModal({
   entries: JudgeEntry[];
   onClose: () => void;
 }) {
-  const [config, setConfig] = useState<WinnersConfig>(DEFAULT_CONFIG);
+  const [config, setConfig] = useState<WinnersConfig>(DEFAULT_WINNERS_CONFIG);
   const [editing, setEditing] = useState(false);
   const [soundOn, setSoundOn] = useState(true);
   const [stepIndex, setStepIndex] = useState(0);
@@ -221,8 +186,10 @@ export function WinnersPodiumModal({
   const fanfareRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    setConfig(loadConfig());
-  }, []);
+    if (open) {
+      setConfig(loadWinnersConfig());
+    }
+  }, [open]);
 
   const steps = useMemo(() => buildSteps(config.topCount), [config.topCount]);
   const currentStep = steps[stepIndex] ?? { type: "idle" };
@@ -230,11 +197,7 @@ export function WinnersPodiumModal({
   const updateConfig = useCallback((updater: (prev: WinnersConfig) => WinnersConfig) => {
     setConfig((prev) => {
       const next = updater(prev);
-      try {
-        window.localStorage.setItem(WINNERS_CONFIG_KEY, JSON.stringify(next));
-      } catch {
-        /* ignore */
-      }
+      saveWinnersConfig(next);
       return next;
     });
   }, []);
@@ -956,7 +919,7 @@ export function WinnersPodiumModal({
               </div>
               <button
                 type="button"
-                onClick={() => updateConfig(() => DEFAULT_CONFIG)}
+                onClick={() => updateConfig(() => DEFAULT_WINNERS_CONFIG)}
                 className="inline-flex items-center gap-1 rounded-lg border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-white/10"
               >
                 <IconRefresh className="h-3.5 w-3.5" />
